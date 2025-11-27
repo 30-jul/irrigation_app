@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid mt-4">
+
+  <!-- Page header -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0 text-success fw-bold">Weather Data – GreenFuel Estate</h2>
+    <span class="badge bg-success-subtle text-success border border-success">
+      Today: {{ today.strftime("%d %b %Y") }}
+    </span>
+  </div>
+
+  <!-- Add new weather row -->
+  <div class="card mb-4 shadow-sm border-success">
+    <div class="card-header bg-success text-white fw-semibold">
+      Add Daily Weather
+    </div>
+    <div class="card-body">
+      <form method="post" class="row gy-2 gx-3 align-items-end">
+        <input type="hidden" name="action" value="add_weather">
+        <div class="col-md-2">
+          <label class="form-label mb-0">Date</label>
+          <input type="date" name="weather_date" class="form-control" required>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label mb-0">Tmax (°C)</label>
+          <input type="number" step="0.1" name="tmax" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label mb-0">Tmin (°C)</label>
+          <input type="number" step="0.1" name="tmin" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label mb-0">Rain (mm)</label>
+          <input type="number" step="0.1" name="rain" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label mb-0">ET₀ (mm)</label>
+          <input type="number" step="0.01" name="et0" class="form-control">
+        </div>
+        <div class="col-md-2 d-grid">
+          <button type="submit" class="btn btn-success mt-3">
+            Save Day
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- History + inline edit (LATEST FIRST) -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-light d-flex justify-content-between align-items-center">
+      <span class="fw-semibold">Daily History (latest on top)</span>
+      <a href="{{ url_for('download_weather') }}" class="btn btn-outline-success btn-sm">
+        Download CSV
+      </a>
+    </div>
+    <div class="card-body p-0">
+      <form method="post">
+        <input type="hidden" name="action" value="edit_weather">
+        <input type="hidden" name="row_count" value="{{ weather_row_count }}">
+        <div class="table-responsive">
+          <table class="table table-sm table-striped table-hover align-middle mb-0">
+            <thead class="table-success">
+              <tr class="text-center">
+                <th style="min-width:110px;">Date</th>
+                <th>Tmax (°C)</th>
+                <th>Tmin (°C)</th>
+                <th>Rain (mm)</th>
+                <th>ET₀ (mm)</th>
+                <th style="width:80px;">Delete</th>
+              </tr>
+            </thead>
+            <tbody>
+              {# sort by date descending so latest is on top #}
+              {% for row in weather_rows | sort(attribute='date', reverse=True) %}
+              {% set i = loop.index0 %}
+              <tr class="text-center">
+                <td>
+                  <input type="date"
+                         name="date_{{ i }}"
+                         value="{{ row.date_str }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.1"
+                         name="tmax_{{ i }}"
+                         value="{{ row.tmax }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.1"
+                         name="tmin_{{ i }}"
+                         value="{{ row.tmin }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.1"
+                         name="rain_{{ i }}"
+                         value="{{ row.rain }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.01"
+                         name="et0_{{ i }}"
+                         value="{{ row.et0 }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input class="form-check-input" type="checkbox"
+                         name="delete_{{ i }}">
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <div class="p-3 text-end">
+          <button type="submit" class="btn btn-success">
+            Save Edits
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Monthly stats -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-success text-white fw-semibold">
+      Monthly Summary (All Recorded Months)
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead class="table-light">
+            <tr class="text-center">
+              <th>Month</th>
+              <th>Avg Tmax (°C)</th>
+              <th>Avg Tmin (°C)</th>
+              <th>Total Rain (mm)</th>
+              <th>Avg ET₀ (mm/day)</th>
+              <th>Cumulative ET₀ (mm)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in monthly_stats %}
+            <tr class="text-center">
+              <td class="fw-semibold">{{ m.label }}</td>
+              <td>{{ m.avg_tmax if m.avg_tmax is not none else "-" }}</td>
+              <td>{{ m.avg_tmin if m.avg_tmin is not none else "-" }}</td>
+              <td>{{ m.sum_rain if m.sum_rain is not none else "-" }}</td>
+              <td>{{ m.avg_et0 if m.avg_et0 is not none else "-" }}</td>
+              <td>{{ m.cum_et0 if m.cum_et0 is not none else "-" }}</td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="6" class="text-center text-muted py-3">
+                No monthly statistics yet. Add some daily weather first.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

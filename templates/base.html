@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GreenFuel Agric Monitor</title>
+
+    <!-- Bootstrap -->
+    <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    />
+
+    <style>
+        :root {
+            --gf-dark: #006838;      /* GreenFuel dark green */
+            --gf-mid:  #00a651;      /* GreenFuel mid green */
+            --gf-light:#a5d6a7;      /* soft green */
+            --gf-accent:#ffb300;     /* yellow/orange accent */
+        }
+
+        body {
+            background: radial-gradient(circle at top left, #e8f5e9 0, #f5f7fa 40%, #eef7ff 100%);
+            min-height: 100vh;
+        }
+
+        /* NAVBAR */
+        .navbar.gf-navbar {
+            background: linear-gradient(90deg, var(--gf-dark), var(--gf-mid));
+            border-bottom: 3px solid var(--gf-accent);
+        }
+        .gf-navbar .navbar-brand {
+            font-weight: 700;
+            font-size: 1.35rem;
+            letter-spacing: 0.03em;
+            color: #ffffff !important;
+            display: flex;
+            align-items: center;
+        }
+        .gf-navbar .navbar-brand span.logo-mark {
+            display: inline-flex;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            margin-right: 8px;
+            background: radial-gradient(circle at 30% 20%, #ffffff 0, #c5e1a5 35%, var(--gf-dark) 100%);
+            border: 2px solid rgba(255,255,255,0.7);
+        }
+        .gf-navbar .nav-link {
+            font-weight: 500;
+            color: rgba(255,255,255,0.9) !important;
+        }
+        .gf-navbar .nav-link.active,
+        .gf-navbar .nav-link:hover {
+            color: #ffffff !important;
+            background-color: rgba(0,0,0,0.12);
+            border-radius: 999px;
+        }
+        .gf-navbar .dropdown-menu {
+            border-radius: 0.75rem;
+        }
+
+        /* PAGE LAYOUT */
+        .page-shell {
+            padding-top: 0.8rem;
+            padding-bottom: 1.5rem;
+        }
+
+        /* CARDS */
+        .card {
+            border-radius: 1rem;
+            border: 1px solid rgba(0,0,0,0.04);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        }
+        .card-header {
+            border-radius: 1rem 1rem 0 0 !important;
+            border-bottom: none;
+            background: linear-gradient(90deg, rgba(0,104,56,0.95), rgba(0,166,81,0.9));
+            color: #ffffff;
+            padding-top: 0.6rem;
+            padding-bottom: 0.6rem;
+        }
+        .card-header h5 {
+            font-weight: 600;
+        }
+        .card-body {
+            background-color: #ffffff;
+        }
+
+        /* TABLES */
+        .table thead.table-light {
+            background-color: #e8f5e9;
+        }
+        .table-striped tbody tr:nth-of-type(odd) {
+            background-color: #fafafa;
+        }
+
+        /* SMALL BADGES (useful for status later) */
+        .gf-badge {
+            font-size: 0.70rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border-radius: 999px;
+            padding: 0.15rem 0.5rem;
+            background-color: rgba(255,255,255,0.16);
+            color: #ffffff;
+        }
+
+        /* TV MODE – larger fonts for big screen in office */
+        .tv-mode h3 { font-size: 2.0rem; }
+        .tv-mode h5 { font-size: 1.5rem; }
+        .tv-mode .card-body { font-size: 1.1rem; }
+        .tv-mode table { font-size: 1.05rem; }
+        .tv-mode .card { box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
+
+        @media (max-width: 768px) {
+            .gf-navbar .navbar-brand span.text-label {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- NAVIGATION BAR (GreenFuel themed) -->
+<nav class="navbar navbar-expand-lg navbar-dark gf-navbar sticky-top shadow-sm">
+  <div class="container-fluid">
+
+    <a class="navbar-brand" href="{{ url_for('index') }}">
+      <span class="logo-mark"></span>
+      <span class="text-label">GreenFuel Irrigation</span>
+    </a>
+
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#navMenu"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navMenu">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}"
+             href="{{ url_for('index') }}">
+            Overview
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'weather_page' %}active{% endif %}"
+             href="{{ url_for('weather_page') }}">
+            Weather
+          </a>
+        </li>
+
+        <!-- Blocks -->
+        <li class="nav-item dropdown">
+          <a
+            class="nav-link dropdown-toggle {% if 'block_view' in request.endpoint %}active{% endif %}"
+            href="#"
+            id="blocksDropdown"
+            data-bs-toggle="dropdown"
+          >
+            Blocks
+          </a>
+          <ul class="dropdown-menu">
+            {% if num_blocks is defined and block_names is defined %}
+              {% for i in range(1, num_blocks + 1) %}
+                <li>
+                  <a class="dropdown-item"
+                     href="{{ url_for('block_view', block_id=i) }}">
+                     {{ block_names[i-1] }}
+                  </a>
+                </li>
+              {% endfor %}
+            {% endif %}
+          </ul>
+        </li>
+
+        <!-- Agronomy -->
+        <li class="nav-item dropdown">
+          <a
+            class="nav-link dropdown-toggle {% if 'agronomy_view' in request.endpoint %}active{% endif %}"
+            href="#"
+            id="agroDropdown"
+            data-bs-toggle="dropdown"
+          >
+            Agronomy
+          </a>
+          <ul class="dropdown-menu">
+            {% if num_blocks is defined and block_names is defined %}
+              {% for i in range(1, num_blocks + 1) %}
+                <li>
+                  <a class="dropdown-item"
+                     href="{{ url_for('agronomy_view', block_id=i) }}">
+                     {{ block_names[i-1] }}
+                  </a>
+                </li>
+              {% endfor %}
+            {% endif %}
+          </ul>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'ndvi_page' %}active{% endif %}"
+             href="{{ url_for('ndvi_page') }}">
+            NDVI
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link {% if request.endpoint == 'pests_page' %}active{% endif %}"
+             href="{{ url_for('pests_page') }}">
+            Pests
+          </a>
+        </li>
+
+      </ul>
+
+      <!-- Right side: small label -->
+      <span class="gf-badge d-none d-md-inline">
+        Chisumbanje &amp; Middle Sabi · Live
+      </span>
+
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid page-shell">
+    {% block content %}{% endblock %}
+</div>
+
+{% block extra_scripts %}{% endblock %}
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>

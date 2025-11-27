@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0 text-success fw-bold">
+      Agronomy – {{ block_name }}
+    </h2>
+    <div class="text-end">
+      <div class="small text-muted">
+        Today: {{ today.strftime("%d %b %Y") }}
+      </div>
+      {% if age_days is not none %}
+      <span class="badge bg-success-subtle text-success border border-success mt-1">
+        Age: {{ age_days }} days ({{ age_months }} months)
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Block meta -->
+  <div class="card mb-4 shadow-sm border-success">
+    <div class="card-body row g-3">
+      <div class="col-md-4">
+        <label class="form-label mb-0">Cut / Plant Date</label>
+        <input type="text" class="form-control" value="{{ cut_date }}" disabled>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label mb-0">Variety</label>
+        <input type="text" class="form-control" value="{{ variety }}" disabled>
+      </div>
+      <div class="col-md-4 d-flex align-items-end justify-content-end">
+        <a href="{{ url_for('block_view', block_id=block_id) }}" class="btn btn-outline-success">
+          ← Back to Irrigation
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Growth charts -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-success text-white">
+      Growth Trend – Weekly Gain vs Cumulative Height
+    </div>
+    <div class="card-body">
+      <canvas id="growthChart" height="90"></canvas>
+    </div>
+  </div>
+
+  <!-- Editable agronomy table -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-light fw-semibold">
+      Weekly Agronomy Data (Growth, Fertigation, Chemigation)
+    </div>
+    <div class="card-body p-0">
+      <form method="post">
+        <div class="border-bottom p-3 bg-success-subtle">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label mb-0">Variety</label>
+              <input type="text" name="variety" value="{{ variety }}" class="form-control">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label mb-0">Cut / Plant Date</label>
+              <input type="date" name="cut_date" value="{{ cut_date }}" class="form-control">
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-striped align-middle mb-0">
+            <thead class="table-success text-center">
+              <tr>
+                <th style="min-width:170px;">Week</th>
+                <th>Weekly Gain (cm)</th>
+                <th>Cumulative (cm)</th>
+                <th>Fertigation</th>
+                <th>Chemigation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+              {% set i = loop.index0 %}
+              <tr class="text-center">
+                <td class="text-start">
+                  <input type="text" name="ag_week_{{ i }}" value="{{ row.week }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.1" name="gain_{{ i }}"
+                         value="{{ row.gain }}" class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="text" value="{{ row.cumulative }}"
+                         class="form-control form-control-sm" readonly>
+                </td>
+                <td>
+                  <input type="text" name="fert_{{ i }}" value="{{ row.fertigation }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="text" name="chem_{{ i }}" value="{{ row.chemigation }}"
+                         class="form-control form-control-sm">
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="p-3 text-end">
+          <button type="submit" class="btn btn-success">
+            Save Agronomy
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const agroLabels = {{ chart_labels|tojson }};
+  const agroGains  = {{ chart_gains|tojson }};
+  const agroCums   = {{ chart_cums|tojson }};
+
+  const ctx = document.getElementById('growthChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: agroLabels,
+      datasets: [
+        {
+          label: 'Weekly gain (cm)',
+          data: agroGains,
+          borderColor: '#198754',
+          backgroundColor: 'rgba(25,135,84,0.2)',
+          tension: 0.3,
+          pointRadius: 2
+        },
+        {
+          label: 'Cumulative height (cm)',
+          data: agroCums,
+          borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13,110,253,0.15)',
+          tension: 0.3,
+          pointRadius: 2,
+          yAxisID: 'y1'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          title: { display: true, text: 'Weekly gain (cm)' }
+        },
+        y1: {
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          title: { display: true, text: 'Cumulative (cm)' }
+        }
+      },
+      plugins: {
+        legend: { position: 'bottom' }
+      }
+    }
+  });
+</script>
+{% endblock %}

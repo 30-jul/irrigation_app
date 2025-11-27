@@ -1,0 +1,536 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- TV MODE styling activated via tv_mode variable -->
+<div class="container-fluid py-3 {% if tv_mode %}tv-mode{% endif %}">
+
+  <!-- Page header + Dashboard Mode buttons -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="d-flex align-items-center">
+      <h3 class="mb-0 me-3">Irrigation & Agronomy Overview</h3>
+
+      <!-- Normal vs Big-Screen Mode Toggle -->
+      <div class="btn-group">
+        <a href="{{ url_for('index', view=view_mode) }}"
+           class="btn btn-sm {% if not tv_mode %}btn-primary{% else %}btn-outline-primary{% endif %}">
+          Normal Dashboard
+        </a>
+        <a href="{{ url_for('index', view=view_mode, tv=1) }}"
+           class="btn btn-sm {% if tv_mode %}btn-primary{% else %}btn-outline-primary{% endif %}">
+          Big-Screen Dashboard
+        </a>
+      </div>
+
+      {% if tv_mode %}
+      <!-- Pause / Resume rotation (TV mode only) -->
+      <button id="tvPauseBtn"
+              class="btn btn-sm btn-outline-warning ms-2">
+        Pause Rotation
+      </button>
+
+      <!-- Next graph (fast forward) button (TV mode only) -->
+      <button id="tvNextBtn"
+              class="btn btn-sm btn-outline-info ms-2">
+        Next Graph ▶
+      </button>
+      {% endif %}
+    </div>
+    <span class="text-muted">Today: {{ today.strftime('%A %d %B %Y') }}</span>
+  </div>
+
+  <!-- Top row: Weather & Monthly Summary -->
+  <div class="row">
+    <!-- Latest weather (7 days) -->
+    <div class="col-lg-6 mb-3 {% if tv_mode %}d-none{% endif %}">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="mb-0">Latest Weather (Last {{ weather_row_count }} Days)</h5>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table table-sm mb-0 table-striped">
+              <thead class="table-light">
+                <tr>
+                  <th>Date</th>
+                  <th class="text-end">Tmax (°C)</th>
+                  <th class="text-end">Tmin (°C)</th>
+                  <th class="text-end">Rain (mm)</th>
+                  <th class="text-end">ET₀ (mm)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for r in weather_rows %}
+                <tr>
+                  <td>{{ r.date_str }}</td>
+                  <td class="text-end">{{ r.tmax }}</td>
+                  <td class="text-end">{{ r.tmin }}</td>
+                  <td class="text-end">{{ r.rain }}</td>
+                  <td class="text-end">{{ r.et0 }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Month Summary -->
+    <div class="col-lg-6 mb-3 {% if tv_mode %}col-lg-12{% endif %}">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="mb-0">Current Month Summary</h5>
+        </div>
+        <div class="card-body">
+          {% if monthly_stats %}
+            {% for m in monthly_stats %}
+            <div class="row mb-2">
+              <div class="col-6"><strong>Month:</strong> {{ m.label }}</div>
+              <div class="col-6"><strong>Rain:</strong> {{ m.sum_rain if m.sum_rain is not none else '-' }} mm</div>
+              <div class="col-6"><strong>Avg Tmax:</strong> {{ m.avg_tmax if m.avg_tmax is not none else '-' }} °C</div>
+              <div class="col-6"><strong>Avg Tmin:</strong> {{ m.avg_tmin if m.avg_tmin is not none else '-' }} °C</div>
+              <div class="col-6"><strong>Avg ET₀:</strong> {{ m.avg_et0 if m.avg_et0 is not none else '-' }} mm</div>
+              <div class="col-6"><strong>Cum ET₀:</strong> {{ m.cum_et0 if m.cum_et0 is not none else '-' }} mm</div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-muted mb-0">No monthly data yet.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Block Performance -->
+  <div class="row">
+    <!-- TV panel 0: Irrigation Block Performance -->
+    <div class="col-lg-8 mb-3 {% if tv_mode %}col-lg-12{% endif %} tv-panel" data-tv-panel="0">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between">
+          <h5 class="mb-0">{{ comparison_title }}</h5>
+
+          <div>
+            <a href="{{ url_for('index', view='week', tv=tv_mode|int) }}"
+               class="btn btn-sm {% if view_mode == 'week' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+              Weekly % of Schedule
+            </a>
+            <a href="{{ url_for('index', view='season', tv=tv_mode|int) }}"
+               class="btn btn-sm {% if view_mode == 'season' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+              Season Total (mm)
+            </a>
+          </div>
+
+        </div>
+        <div class="card-body" style="height:350px;">
+          <canvas id="blockComparisonChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Block Filter (Hide in TV mode) -->
+    <div class="col-lg-4 mb-3 {% if tv_mode %}d-none{% endif %}">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="mb-0">Focus Blocks (max 6)</h5>
+        </div>
+        <div class="card-body">
+          <form method="get">
+            <input type="hidden" name="view" value="{{ view_mode }}">
+            <select name="filter_block" multiple class="form-select" size="8">
+              {% for idx in range(1, num_blocks + 1) %}
+                <option value="{{ idx }}" {% if idx in filter_selected_ids %}selected{% endif %}>
+                  {{ block_names[idx-1] }}
+                </option>
+              {% endfor %}
+            </select>
+            <button class="btn btn-sm btn-primary mt-2 w-100">Apply Filter</button>
+          </form>
+
+          <div style="height:200px;">
+            <canvas id="blockFilterChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Forecast + Agronomy Snapshot -->
+  <div class="row">
+    <!-- TV panel 1: Forecast -->
+    <div class="col-lg-6 mb-3 {% if tv_mode %}col-lg-12{% endif %} tv-panel" data-tv-panel="1">
+      <div class="card h-100">
+        <div class="card-header">
+          <h5 class="mb-0">7-Day Forecast</h5>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive {% if tv_mode %}d-none{% endif %}">
+            <table class="table table-sm table-striped">
+              <thead class="table-light">
+                <tr>
+                  <th>Date</th>
+                  <th>Symbol</th>
+                  <th class="text-end">Temp</th>
+                  <th class="text-end">Rain</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for d in forecast_days %}
+                <tr>
+                  <td>{{ d.weekday }} {{ d.date_short }}</td>
+                  <td>{{ d.emoji }}</td>
+                  <td class="text-end">{{ d.temp_str }}</td>
+                  <td class="text-end">{{ d.rain_str }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="height:220px;">
+            <canvas id="forecastChart"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TV panel 2: Agronomy Snapshot (BIG) -->
+    <div class="col-lg-6 mb-3 {% if tv_mode %}col-lg-12{% endif %} tv-panel" data-tv-panel="2">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between">
+          <h5 class="mb-0">Agronomy Snapshot – Weekly Gain & Cumulative</h5>
+          <div>
+            <button type="button"
+                    class="btn btn-sm btn-outline-primary me-2"
+                    onclick="showAgroMode('weekly')">
+              Weekly Gain
+            </button>
+            <button type="button"
+                    class="btn btn-sm btn-outline-secondary"
+                    onclick="showAgroMode('cum')">
+              Cumulative Height
+            </button>
+          </div>
+        </div>
+        <!-- Bigger chart height to match main irrigation chart / TV screen -->
+        <div class="card-body" style="height:420px;">
+          <canvas id="agronomyChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TV panel 3: Soil Moisture Balance (Latest by Block) -->
+  <div class="row tv-panel" data-tv-panel="3">
+    <div class="col-12 mb-4">
+      <div class="card">
+        <div class="card-header">
+          <h5 class="mb-0">Soil Moisture Balance (Latest by Block)</h5>
+        </div>
+        <div class="card-body" style="height:300px;">
+          <canvas id="soilChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<!-- Big-Screen (TV Mode) styles -->
+<style>
+  .tv-mode h5 { font-size: 1.4rem; }
+  .tv-mode .card { border-width: 2px; }
+  .tv-mode .card-body { font-size: 1.2rem; }
+  .tv-mode .table-responsive { display: none !important; }
+</style>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+/* DATA FROM FLASK */
+const comparisonLabels = {{ comparison_labels|tojson }};
+const comparisonValues = {{ comparison_values|tojson }};
+const comparisonColors = {{ comparison_colors|tojson }};
+const comparisonYLabel = {{ comparison_y_label|tojson }};
+
+const filterLabels = {{ filter_labels|tojson }};
+const filterValues = {{ filter_values|tojson }};
+const filterColors = {{ filter_colors|tojson }};
+
+const forecastLabels = {{ forecast_chart_labels|tojson }};
+const forecastTemps = {{ forecast_chart_temp|tojson }};
+const forecastRain = {{ forecast_chart_rain|tojson }};
+
+const blockNames = {{ block_names|tojson }};
+const agroWeekly = {{ agro_weekly|tojson }};
+const agroCum   = {{ agro_cum|tojson }};
+
+const ndviDict  = {{ avg_ndvi_by_block|tojson }};
+const pestDict  = {{ pest_counts|tojson }};
+
+const tvMode = {{ 'true' if tv_mode else 'false' }};
+
+/* Helper: convert dict to ordered arrays */
+function dictToArrays(d){
+  const k = Object.keys(d).sort();
+  return {keys: k, values: k.map(x => d[x])};
+}
+
+/* MAIN BLOCK CHART */
+new Chart(document.getElementById('blockComparisonChart'), {
+  type: 'bar',
+  data: {
+    labels: comparisonLabels,
+    datasets: [{
+      label: comparisonYLabel,
+      data: comparisonValues,
+      backgroundColor: comparisonColors && comparisonColors.length
+        ? comparisonColors
+        : 'rgba(54,162,235,0.6)'
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: { y: { beginAtZero: true } }
+  }
+});
+
+/* FILTER CHART (hidden in TV mode) */
+{% if not tv_mode %}
+new Chart(document.getElementById('blockFilterChart'), {
+  type: 'bar',
+  data: {
+    labels: filterLabels,
+    datasets: [{
+      label: comparisonYLabel,
+      data: filterValues,
+      backgroundColor: filterColors && filterColors.length
+        ? filterColors
+        : 'rgba(75,192,192,0.6)'
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: { y: { beginAtZero: true } }
+  }
+});
+{% endif %}
+
+/* FORECAST CHART */
+new Chart(document.getElementById('forecastChart'), {
+  type: 'bar',
+  data: {
+    labels: forecastLabels,
+    datasets: [
+      {
+        type: 'line',
+        label: 'Temp (°C)',
+        data: forecastTemps,
+        borderWidth: 2,
+        tension: 0.3
+      },
+      {
+        type: 'bar',
+        label: 'Rain (mm)',
+        data: forecastRain
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      y: { beginAtZero: true }
+    }
+  }
+});
+
+/* AGRONOMY SNAPSHOT — BOTH WEEKLY & CUMULATIVE ARE BARS */
+const agroCtx = document.getElementById('agronomyChart').getContext('2d');
+let agroChart = new Chart(agroCtx, {
+  type: 'bar',
+  data: {
+    labels: blockNames,
+    datasets: [
+      {
+        label: 'Weekly Gain (cm)',
+        data: agroWeekly,
+        backgroundColor: 'rgba(0, 123, 255, 0.70)',
+        borderColor: 'rgba(0, 123, 255, 1)',
+        borderWidth: 1,
+        hidden: false,
+        yAxisID: 'y'
+      },
+      {
+        label: 'Cumulative Height (cm)',
+        data: agroCum,
+        backgroundColor: 'rgba(40, 167, 69, 0.70)',
+        borderColor: '#28a745',
+        borderWidth: 1,
+        hidden: true,
+        yAxisID: 'y'
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'Height (cm)' }
+      }
+    },
+    plugins: {
+      legend: { position: 'top' }
+    }
+  }
+});
+
+/* TOGGLE FUNCTION FOR AGRONOMY SNAPSHOT */
+function showAgroMode(mode){
+  if (mode === 'weekly') {
+    agroChart.data.datasets[0].hidden = false;  // weekly visible
+    agroChart.data.datasets[1].hidden = true;   // cumulative hidden
+  } else {
+    agroChart.data.datasets[0].hidden = true;
+    agroChart.data.datasets[1].hidden = false;
+  }
+  agroChart.update();
+}
+
+/* Soil moisture balance chart (latest by block) */
+const soilRaw    = {{ latest_balances | tojson }};
+const soilLabels = Object.keys(soilRaw);
+const soilValues = soilLabels.map(name => soilRaw[name].balance || 0);
+
+const soilCanvas = document.getElementById('soilChart');
+if (soilCanvas) {
+  const ctxSoil = soilCanvas.getContext('2d');
+  new Chart(ctxSoil, {
+    type: 'bar',
+    data: {
+      labels: soilLabels,
+      datasets: [{
+        label: 'Current Balance (mm TAM)',
+        data: soilValues
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          title: { display: true, text: 'Soil moisture balance (mm TAM)' }
+        }
+      },
+      plugins: {
+        legend: { display: false }
+      }
+    }
+  });
+}
+
+/* (Optional) NDVI & Pest charts if you add canvases on another page */
+const ndvi = dictToArrays(ndviDict);
+if (document.getElementById('ndviChart')) {
+  new Chart(document.getElementById('ndviChart'), {
+    type: 'bar',
+    data: {
+      labels: ndvi.keys,
+      datasets: [{ label: 'Avg NDVI', data: ndvi.values }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+}
+
+const pests = dictToArrays(pestDict);
+if (document.getElementById('pestChart')) {
+  new Chart(document.getElementById('pestChart'), {
+    type: 'bar',
+    data: {
+      labels: pests.keys,
+      datasets: [{ label: 'Reports', data: pests.values }]
+    },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
+}
+
+/* ===========================
+   TV MODE AUTO-ROTATION LOGIC
+   =========================== */
+if (tvMode) {
+  let currentPanelIndex = 0;
+  let isPaused = false;
+  let rotationInterval = null;
+
+  function getPanels() {
+    return Array.from(document.querySelectorAll('.tv-panel'));
+  }
+
+  function showPanel(idx) {
+    const panels = getPanels();
+    if (!panels.length) return;
+    panels.forEach((panel, i) => {
+      panel.style.display = (i === idx) ? '' : 'none';
+    });
+  }
+
+  function gotoNextPanel() {
+    const panels = getPanels();
+    if (!panels.length) return;
+    currentPanelIndex = (currentPanelIndex + 1) % panels.length;
+    showPanel(currentPanelIndex);
+  }
+
+  function startRotation() {
+    const panels = getPanels();
+    if (!panels.length) return;
+    // Ensure first panel visible
+    showPanel(currentPanelIndex);
+
+    rotationInterval = setInterval(() => {
+      if (isPaused) return;
+      gotoNextPanel();
+    }, 60000); // 60 000 ms = 1 minute
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    // Start rotation when DOM is ready
+    startRotation();
+
+    const pauseBtn = document.getElementById('tvPauseBtn');
+    const nextBtn  = document.getElementById('tvNextBtn');
+
+    if (pauseBtn) {
+      pauseBtn.addEventListener('click', () => {
+        isPaused = !isPaused;
+        if (isPaused) {
+          pauseBtn.textContent = 'Resume Rotation';
+          pauseBtn.classList.remove('btn-outline-warning');
+          pauseBtn.classList.add('btn-success');
+        } else {
+          pauseBtn.textContent = 'Pause Rotation';
+          pauseBtn.classList.remove('btn-success');
+          pauseBtn.classList.add('btn-outline-warning');
+        }
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', () => {
+        gotoNextPanel();
+      });
+    }
+  });
+}
+</script>
+{% endblock %}

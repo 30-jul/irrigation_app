@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid mt-4">
+
+  <!-- Header -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0 text-success fw-bold">
+      Block Dashboard – {{ block_name }}
+    </h2>
+    <div class="text-end">
+      <div class="small text-muted">
+        Today: {{ today.strftime("%d %b %Y") }}
+      </div>
+      {% if age_days is not none %}
+      <span class="badge bg-success-subtle text-success border border-success mt-1">
+        Age: {{ age_days }} days ({{ age_months }} months)
+      </span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Meta panel -->
+  <div class="card mb-4 shadow-sm border-success">
+    <div class="card-body row g-3">
+      <div class="col-md-3">
+        <label class="form-label mb-0">Cut / Plant Date</label>
+        <input type="date" name="dummy_cut" value="{{ cut_date }}" class="form-control" disabled>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-0">Kc</label>
+        <input type="text" value="{{ kc }}" class="form-control" disabled>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-0">Average % of Schedule</label>
+        <input type="text" class="form-control"
+               value="{{ avg_pct if avg_pct is not none else '-' }}" disabled>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label mb-0">Range % (min–max)</label>
+        <input type="text" class="form-control"
+               value="{% if min_pct is not none and max_pct is not none %}{{ min_pct }} – {{ max_pct }}{% else %}-{% endif %}"
+               disabled>
+      </div>
+    </div>
+  </div>
+
+  <!-- Irrigation chart -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-success text-white">
+      Weekly Irrigation – Scheduled vs Actual + Eff. Rain
+    </div>
+    <div class="card-body">
+      <canvas id="irrigChart" height="80"></canvas>
+    </div>
+  </div>
+
+  <!-- Irrigation table + Soil moisture P&L -->
+  <form method="post">
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-light fw-semibold">
+        Irrigation Schedule vs Actual (Weekly)
+      </div>
+      <div class="card-body p-0">
+        <div class="border-bottom p-3 bg-success-subtle">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label mb-0">Cut / Plant Date</label>
+              <input type="date" name="cut_date" value="{{ cut_date }}" class="form-control">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label mb-0">Kc</label>
+              <input type="text" name="kc" value="{{ kc }}" class="form-control">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label mb-0">Variety</label>
+              <input type="text" name="variety"
+                     value="{{ block_meta.variety if block_meta is defined else '' }}"
+                     class="form-control">
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-striped align-middle mb-0">
+            <thead class="table-success text-center">
+              <tr>
+                <th>Week</th>
+                <th>Scheduled (mm)</th>
+                <th>Actual (mm)</th>
+                <th>Eff. Rain (mm)</th>
+                <th>% of Schedule</th>
+                <th>Comment</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+              {% set i = loop.index0 %}
+              <tr class="text-center">
+                <td class="text-start">
+                  <input type="text" name="week_{{ i }}" value="{{ row.week }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.1" name="scheduled_{{ i }}"
+                         value="{{ row.scheduled }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.1" name="actual_{{ i }}"
+                         value="{{ row.actual }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.1" name="effrain_{{ i }}"
+                         value="{{ row.eff_rain }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="text" value="{{ row.percent }}"
+                         class="form-control form-control-sm" readonly>
+                </td>
+                <td>
+                  <input type="text" name="comment_{{ i }}" value="{{ row.comment }}"
+                         class="form-control form-control-sm">
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Soil moisture profit & loss -->
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-success text-white">
+        Soil Moisture Profit & Loss – Manual Entries
+      </div>
+      <div class="card-body p-0">
+        <div class="p-3 bg-success-subtle border-bottom">
+          <div class="row g-3">
+            <div class="col-md-3">
+              <label class="form-label mb-0">Start Balance (mm TAM)</label>
+              <input type="number" step="0.1" name="sm_start_balance"
+                     value="{{ sm_start_balance }}" class="form-control">
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-sm table-striped align-middle mb-0">
+            <thead class="table-light text-center">
+              <tr>
+                <th style="min-width:110px;">Date</th>
+                <th>ET₀ (mm)</th>
+                <th>Kc</th>
+                <th>ETc (mm)</th>
+                <th>Rain (mm)</th>
+                <th>Eff. Rain (mm)</th>
+                <th>Irrigation (mm)</th>
+                <th>Balance (mm)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in sm_rows %}
+              {% set i = loop.index0 %}
+              <tr class="text-center">
+                <td>
+                  <input type="date" name="sm_date_{{ i }}"
+                         value="{{ r.date_str }}" class="form-control form-control-sm">
+                </td>
+                <td>{{ r.et0 }}</td>
+                <td>{{ r.kc }}</td>
+                <td>{{ r.etc }}</td>
+                <td>{{ r.rain }}</td>
+                <td>
+                  <input type="number" step="0.1" name="sm_eff_{{ i }}"
+                         value="{{ r.eff_rain_str }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>
+                  <input type="number" step="0.1" name="sm_irr_{{ i }}"
+                         value="{{ r.irr_str }}"
+                         class="form-control form-control-sm">
+                </td>
+                <td>{{ r.balance }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <input type="hidden" name="sm_row_count" value="{{ sm_row_count }}">
+
+        <div class="p-3 text-end">
+          <button type="submit" class="btn btn-success">
+            Save Block Data
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const irrLabels = {{ chart_labels|tojson }};
+  const scheduledVals = {{ chart_scheduled|tojson }};
+  const actualVals    = {{ chart_actual|tojson }};
+
+  const irrCtx = document.getElementById('irrigChart').getContext('2d');
+  new Chart(irrCtx, {
+    type: 'bar',
+    data: {
+      labels: irrLabels,
+      datasets: [
+        {
+          label: 'Scheduled (mm)',
+          data: scheduledVals,
+          borderColor: '#0d6efd',
+          backgroundColor: 'rgba(13,110,253,0.3)'
+        },
+        {
+          label: 'Actual + Eff. Rain (mm)',
+          data: actualVals,
+          borderColor: '#198754',
+          backgroundColor: 'rgba(25,135,84,0.4)'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom' }
+      },
+      scales: {
+        y: {
+          title: { display: true, text: 'mm' }
+        }
+      }
+    }
+  });
+</script>
+{% endblock %}

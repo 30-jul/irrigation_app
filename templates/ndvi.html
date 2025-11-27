@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="mb-0 text-success fw-bold">NDVI & Biomass – GreenFuel Blocks</h2>
+    <span class="small text-muted">Today: {{ today.strftime("%d %b %Y") }}</span>
+  </div>
+
+  <!-- Add NDVI record -->
+  <div class="card mb-4 shadow-sm border-success">
+    <div class="card-header bg-success text-white fw-semibold">
+      Add NDVI Observation
+    </div>
+    <div class="card-body">
+      <form method="post" class="row g-3 align-items-end">
+        <div class="col-md-3">
+          <label class="form-label mb-0">Date</label>
+          <input type="date" name="date" class="form-control" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label mb-0">Block</label>
+          <select name="block_id" class="form-select" required>
+            <option value="">Select block…</option>
+            {% for name in block_names %}
+            <option value="{{ loop.index }}">{{ name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label mb-0">NDVI</label>
+          <input type="number" step="0.001" min="0" max="1"
+                 name="ndvi" class="form-control" required>
+        </div>
+        <div class="col-md-3 d-grid">
+          <button class="btn btn-success mt-3" type="submit">
+            Save NDVI
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Average NDVI trend -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-success text-white">
+      Estate Average NDVI by Date
+    </div>
+    <div class="card-body">
+      <canvas id="ndviChart" height="80"></canvas>
+    </div>
+  </div>
+
+  <!-- Detailed table -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-light fw-semibold">
+      All NDVI Records (by date, then block)
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-sm table-striped align-middle mb-0">
+          <thead class="table-success text-center">
+            <tr>
+              <th>Date</th>
+              <th>Block</th>
+              <th>NDVI</th>
+              <th>Estimated Biomass (t/ha)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in records %}
+            <tr class="text-center">
+              <td>{{ r.date_str }}</td>
+              <td>{{ block_names[r.block_id - 1] }}</td>
+              <td>{{ '%.3f'|format(r.ndvi) }}</td>
+              <td>
+                {% if r.biomass is not none %}
+                  {{ '%.1f'|format(r.biomass) }}
+                {% else %}
+                  -
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="4" class="text-center text-muted py-3">
+                No NDVI data yet.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+  const ndviDates = {{ chart_dates|tojson }};
+  const ndviVals  = {{ chart_ndvi|tojson }};
+
+  const ndviCtx = document.getElementById('ndviChart').getContext('2d');
+  new Chart(ndviCtx, {
+    type: 'line',
+    data: {
+      labels: ndviDates,
+      datasets: [{
+        label: 'Average NDVI',
+        data: ndviVals,
+        borderColor: '#198754',
+        backgroundColor: 'rgba(25,135,84,0.2)',
+        tension: 0.3,
+        pointRadius: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: {
+          min: 0,
+          max: 1,
+          title: { display: true, text: 'NDVI' }
+        }
+      },
+      plugins: {
+        legend: { position: 'bottom' }
+      }
+    }
+  });
+</script>
+{% endblock %}

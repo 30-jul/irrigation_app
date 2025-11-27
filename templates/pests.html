@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Pests & Diseases Monitoring</h3>
+    <span class="text-muted">Today: {{ today.strftime('%A %d %B %Y') }}</span>
+  </div>
+
+  <!-- ADD NEW PEST RECORD -->
+  <div class="card mb-4">
+    <div class="card-header">
+      <h5 class="mb-0">Add New Pest / Disease Record</h5>
+    </div>
+    <div class="card-body">
+      <form method="post" class="row g-3">
+        <input type="hidden" name="action" value="add_pest">
+
+        <div class="col-md-3">
+          <label class="form-label">Date</label>
+          <input type="date" name="date" class="form-control" required>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Block</label>
+          <select name="block_id" class="form-select" required>
+            <option value="">-- Select Block --</option>
+            {% for idx in range(1, num_blocks + 1) %}
+            <option value="{{ idx }}">{{ block_names[idx-1] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Pest / Disease</label>
+          <input type="text" name="pest" class="form-control" placeholder="e.g. Eldana, Rust" required>
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Severity</label>
+          <input type="text" name="severity" class="form-control" placeholder="e.g. Low, Medium, High">
+        </div>
+
+        <div class="col-md-3">
+          <label class="form-label">Area Affected (ha)</label>
+          <input type="number" step="0.01" name="area" class="form-control" placeholder="e.g. 2.5">
+        </div>
+
+        <div class="col-md-9">
+          <label class="form-label">Action Taken / Recommendation</label>
+          <textarea name="action_text" rows="2" class="form-control"
+                    placeholder="e.g. Scout entire block, schedule spray, monitor weekly..."></textarea>
+        </div>
+
+        <div class="col-12">
+          <button type="submit" class="btn btn-success">
+            Save Record
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- EDIT / DELETE EXISTING RECORDS -->
+  <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h5 class="mb-0">Existing Pests & Disease Records</h5>
+      <small class="text-muted">Tick "Delete" to remove entries, then click Save Changes.</small>
+    </div>
+    <div class="card-body p-0">
+      <form method="post">
+        <input type="hidden" name="action" value="edit_pests">
+        <input type="hidden" name="row_count" value="{{ records|length }}">
+
+        <div class="table-responsive">
+          <table class="table table-sm table-striped mb-0 align-middle">
+            <thead class="table-light">
+              <tr>
+                <th style="min-width: 110px;">Date</th>
+                <th style="min-width: 140px;">Block</th>
+                <th style="min-width: 150px;">Pest / Disease</th>
+                <th style="min-width: 110px;">Severity</th>
+                <th style="min-width: 120px;">Area (ha)</th>
+                <th>Action Taken / Recommendation</th>
+                <th class="text-center" style="width: 80px;">Delete</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if records %}
+                {% for r in records %}
+                <tr>
+                  <!-- index for names -->
+                  {% set i = loop.index0 %}
+
+                  <td>
+                    <input type="date"
+                           name="date_{{ i }}"
+                           class="form-control form-control-sm"
+                           value="{{ r.date_str }}">
+                  </td>
+
+                  <td>
+                    <select name="block_id_{{ i }}" class="form-select form-select-sm">
+                      {% for idx in range(1, num_blocks + 1) %}
+                      <option value="{{ idx }}"
+                              {% if idx == r.block_id %}selected{% endif %}>
+                        {{ block_names[idx-1] }}
+                      </option>
+                      {% endfor %}
+                    </select>
+                  </td>
+
+                  <td>
+                    <input type="text"
+                           name="pest_{{ i }}"
+                           class="form-control form-control-sm"
+                           value="{{ r.pest }}">
+                  </td>
+
+                  <td>
+                    <input type="text"
+                           name="severity_{{ i }}"
+                           class="form-control form-control-sm"
+                           value="{{ r.severity }}">
+                  </td>
+
+                  <td>
+                    <input type="number"
+                           step="0.01"
+                           name="area_{{ i }}"
+                           class="form-control form-control-sm"
+                           value="{{ r.area if r.area is not none else '' }}">
+                  </td>
+
+                  <td>
+                    <textarea name="action_{{ i }}"
+                              rows="1"
+                              class="form-control form-control-sm">{{ r.action }}</textarea>
+                  </td>
+
+                  <td class="text-center">
+                    <input type="checkbox" name="delete_{{ i }}">
+                  </td>
+                </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="7" class="text-center text-muted py-3">
+                    No pest records captured yet.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+
+        {% if records %}
+        <div class="p-2 border-top text-end">
+          <button type="submit" class="btn btn-primary btn-sm">
+            Save Changes
+          </button>
+        </div>
+        {% endif %}
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
