@@ -36,7 +36,10 @@ DB_CONFIG = {
     "user": os.getenv("DB_USER", "root"),
     "password": os.getenv("DB_PASSWORD", "Progre$$94"),
     "database": os.getenv("DB_NAME", "irrigation_app"),
+    "port": int(os.getenv("DB_PORT", 3306))
 }
+
+
 
 from flask import Flask, render_template, request, redirect, url_for, Response
 
@@ -400,13 +403,19 @@ def compute_soil_balance(block_id: int):
 # ---------------------------------------------------
 # NEW: MySQL CONFIG + LOAD/SAVE HELPERS
 # ---------------------------------------------------
-
-
 def get_db():
-    if mysql is None:
-        raise RuntimeError("mysql-connector-python not installed")
-    return mysql.connect(**DB_CONFIG)
-
+    """
+    Return a MySQL connection using Aiven SSL settings.
+    """
+    return mysql.connect(
+        host=DB_CONFIG["host"],
+        user=DB_CONFIG["user"],
+        password=DB_CONFIG["password"],
+        database=DB_CONFIG["database"],
+        port=DB_CONFIG.get("port", 3306),
+        ssl_ca=None,         # Aiven handles SSL internally
+        ssl_disabled=False   # Force SSL on
+    )
 
 def init_db():
     """Create tables if they don't exist."""
