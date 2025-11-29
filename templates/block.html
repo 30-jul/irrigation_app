@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %} 
 {% block content %}
 <div class="container-fluid mt-4">
 
@@ -50,7 +50,9 @@
       Weekly Irrigation – Scheduled vs Actual + Eff. Rain
     </div>
     <div class="card-body">
-      <canvas id="irrigChart" height="80"></canvas>
+      <div class="scroll-x">
+        <canvas id="irrigChart" height="80"></canvas>
+      </div>
     </div>
   </div>
 
@@ -80,16 +82,17 @@
           </div>
         </div>
 
-        <div class="table-responsive">
+        <!-- Scrollable weekly schedule table -->
+        <div class="scroll-x">
           <table class="table table-sm table-striped align-middle mb-0">
             <thead class="table-success text-center">
               <tr>
-                <th>Week</th>
-                <th>Scheduled (mm)</th>
-                <th>Actual (mm)</th>
-                <th>Eff. Rain (mm)</th>
-                <th>% of Schedule</th>
-                <th>Comment</th>
+                <th style="min-width:130px;">Week</th>
+                <th style="min-width:130px;">Scheduled (mm)</th>
+                <th style="min-width:130px;">Actual (mm)</th>
+                <th style="min-width:130px;">Eff. Rain (mm)</th>
+                <th style="min-width:130px;">% of Schedule</th>
+                <th style="min-width:200px;">Comment</th>
               </tr>
             </thead>
             <tbody>
@@ -147,18 +150,19 @@
           </div>
         </div>
 
-        <div class="table-responsive">
+        <!-- Scrollable soil moisture table -->
+        <div class="scroll-x">
           <table class="table table-sm table-striped align-middle mb-0">
             <thead class="table-light text-center">
               <tr>
                 <th style="min-width:110px;">Date</th>
-                <th>ET₀ (mm)</th>
-                <th>Kc</th>
-                <th>ETc (mm)</th>
-                <th>Rain (mm)</th>
-                <th>Eff. Rain (mm)</th>
-                <th>Irrigation (mm)</th>
-                <th>Balance (mm)</th>
+                <th style="min-width:80px;">ET₀ (mm)</th>
+                <th style="min-width:60px;">Kc</th>
+                <th style="min-width:80px;">ETc (mm)</th>
+                <th style="min-width:80px;">Rain (mm)</th>
+                <th style="min-width:110px;">Eff. Rain (mm)</th>
+                <th style="min-width:110px;">Irrigation (mm)</th>
+                <th style="min-width:110px;">Balance (mm)</th>
               </tr>
             </thead>
             <tbody>
@@ -189,6 +193,7 @@
             </tbody>
           </table>
         </div>
+
         <input type="hidden" name="sm_row_count" value="{{ sm_row_count }}">
 
         <div class="p-3 text-end">
@@ -216,13 +221,13 @@
       datasets: [
         {
           label: 'Scheduled (mm)',
-          data: scheduledVals,
-          borderColor: '#0d6efd',
+          data: scheduledVals
+          borderColor: '#0d6efd', 
           backgroundColor: 'rgba(13,110,253,0.3)'
         },
         {
           label: 'Actual + Eff. Rain (mm)',
-          data: actualVals,
+          data: actualVals
           borderColor: '#198754',
           backgroundColor: 'rgba(25,135,84,0.4)'
         }
@@ -235,6 +240,7 @@
       },
       scales: {
         y: {
+          beginAtZero: true,
           title: { display: true, text: 'mm' }
         }
       }

@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "base.html" %} 
 {% block content %}
 <div class="container-fluid mt-4">
 
@@ -59,15 +59,17 @@
       <form method="post">
         <input type="hidden" name="action" value="edit_weather">
         <input type="hidden" name="row_count" value="{{ weather_row_count }}">
-        <div class="table-responsive">
+
+        <!-- scrollable daily history table -->
+        <div class="table-responsive scroll-x">
           <table class="table table-sm table-striped table-hover align-middle mb-0">
             <thead class="table-success">
               <tr class="text-center">
                 <th style="min-width:110px;">Date</th>
-                <th>Tmax (°C)</th>
-                <th>Tmin (°C)</th>
-                <th>Rain (mm)</th>
-                <th>ET₀ (mm)</th>
+                <th style="min-width:90px;">Tmax (°C)</th>
+                <th style="min-width:90px;">Tmin (°C)</th>
+                <th style="min-width:90px;">Rain (mm)</th>
+                <th style="min-width:90px;">ET₀ (mm)</th>
                 <th style="width:80px;">Delete</th>
               </tr>
             </thead>
@@ -115,6 +117,7 @@
             </tbody>
           </table>
         </div>
+
         <div class="p-3 text-end">
           <button type="submit" class="btn btn-success">
             Save Edits
@@ -130,16 +133,17 @@
       Monthly Summary (All Recorded Months)
     </div>
     <div class="card-body p-0">
-      <div class="table-responsive">
+      <!-- scrollable monthly summary table -->
+      <div class="table-responsive scroll-x">
         <table class="table table-sm table-striped align-middle mb-0">
           <thead class="table-light">
             <tr class="text-center">
-              <th>Month</th>
-              <th>Avg Tmax (°C)</th>
-              <th>Avg Tmin (°C)</th>
-              <th>Total Rain (mm)</th>
-              <th>Avg ET₀ (mm/day)</th>
-              <th>Cumulative ET₀ (mm)</th>
+              <th style="min-width:140px;">Month</th>
+              <th style="min-width:140px;">Avg Tmax (°C)</th>
+              <th style="min-width:140px;">Avg Tmin (°C)</th>
+              <th style="min-width:140px;">Total Rain (mm)</th>
+              <th style="min-width:160px;">Avg ET₀ (mm/day)</th>
+              <th style="min-width:170px;">Cumulative ET₀ (mm)</th>
             </tr>
           </thead>
           <tbody>

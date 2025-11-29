@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!DOCTYPE html>  
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
@@ -58,6 +58,9 @@
         }
         .gf-navbar .dropdown-menu {
             border-radius: 0.75rem;
+            /* make long block lists scrollable */
+            max-height: 60vh;
+            overflow-y: auto;
         }
 
         /* PAGE LAYOUT */
@@ -95,7 +98,7 @@
             background-color: #fafafa;
         }
 
-        /* SMALL BADGES (useful for status later) */
+        /* SMALL BADGES */
         .gf-badge {
             font-size: 0.70rem;
             text-transform: uppercase;
@@ -118,9 +121,32 @@
                 display: none;
             }
         }
+
+        /* NOTE: we no longer hide the navbar in tv-body so it shows on Big-Screen dashboard */
+        .tv-body .page-shell {
+            padding-top: 0.4rem;
+        }
+
+        /* GLOBAL: horizontal scroll utility for wide charts/tables */
+        .scroll-x {
+            overflow-x: auto;
+            overflow-y: hidden;
+            width: 100%;
+            padding-bottom: 6px;
+        }
+        .scroll-x canvas {
+            min-width: 1200px;
+        }
+        .scroll-x::-webkit-scrollbar {
+            height: 8px;
+        }
+        .scroll-x::-webkit-scrollbar-thumb {
+            background: var(--gf-mid);
+            border-radius: 4px;
+        }
     </style>
 </head>
-<body>
+<body class="{% if tv_mode is defined and tv_mode %}tv-body{% endif %}">
 
 <!-- NAVIGATION BAR (GreenFuel themed) -->
 <nav class="navbar navbar-expand-lg navbar-dark gf-navbar sticky-top shadow-sm">
@@ -128,7 +154,7 @@
 
     <a class="navbar-brand" href="{{ url_for('index') }}">
       <span class="logo-mark"></span>
-      <span class="text-label">GreenFuel Irrigation</span>
+      <span class="text-label">GreenFuel Agric Monitor</span>
     </a>
 
     <button
@@ -157,15 +183,15 @@
           </a>
         </li>
 
-        <!-- Blocks -->
+        <!-- Irrigation (formerly Blocks) -->
         <li class="nav-item dropdown">
           <a
             class="nav-link dropdown-toggle {% if 'block_view' in request.endpoint %}active{% endif %}"
             href="#"
-            id="blocksDropdown"
+            id="irrigationDropdown"
             data-bs-toggle="dropdown"
           >
-            Blocks
+            Irrigation
           </a>
           <ul class="dropdown-menu">
             {% if num_blocks is defined and block_names is defined %}
@@ -205,12 +231,14 @@
           </ul>
         </li>
 
+        <!-- NDVI (hidden for now)
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'ndvi_page' %}active{% endif %}"
              href="{{ url_for('ndvi_page') }}">
             NDVI
           </a>
         </li>
+        -->
 
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'pests_page' %}active{% endif %}"
@@ -241,3 +269,4 @@
 
 </body>
 </html>
+

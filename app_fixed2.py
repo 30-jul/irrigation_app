@@ -44,7 +44,7 @@ DB_CONFIG = {
 from flask import Flask, render_template, request, redirect, url_for, Response
 
 app = Flask(__name__)
-app.secret_key = "greenfuel-irrigation-dashboard"
+app.secret_key = "greenfuel-agric-monitor"
 
 
 # ---------------------------------------------------
@@ -203,8 +203,6 @@ def agronomy_weekly_and_cum(block_id: int, today: date):
         round(g, 1) if g is not None else None,
         round(c, 1) if c is not None else None,
     )
-
-
 def pct_color(pct):
     """Colour for percentage bar (current week view)."""
     if pct is None:
@@ -222,6 +220,145 @@ def pct_color(pct):
     if p < 50 or p > 150:
         return "#c62828"  # red
     return "#f9a825"     # amber for 50–70 and 130–150
+
+
+# ---------------------------------------------------
+# PREVIOUS WEEK CALCULATIONS (CALENDAR-BASED)
+# ---------------------------------------------------
+
+def get_current_week_window(today):
+    """Return Monday–Sunday window for the current calendar week."""
+    start = today - timedelta(days=today.weekday())   # Monday
+    end = start + timedelta(days=6)                   # Sunday
+    return start, end
+
+
+def get_previous_week_window(today):
+    """Return Monday–Sunday for the previous calendar week."""
+    curr_mon, _ = get_current_week_window(today)
+    prev_mon = curr_mon - timedelta(days=7)
+    prev_sun = prev_mon + timedelta(days=6)
+    return prev_mon, prev_sun
+
+
+def extract_weather_range(start, end):
+    """Extract daily weather rows inside a specific date window."""
+    rows = []
+    for r in weather_data:
+        d = r["date"]
+        if start <= d <= end:
+            rows.append(r)
+    rows = sorted(rows, key=lambda x: x["date"])
+    return rows
+
+
+def extract_irrigation_previous_week(today):
+    """
+    For each block, compute previous-week irrigation performance:
+    % = (Actual + EffRain sum) / (Scheduled sum) × 100
+    Only for calendar previous Monday–Sunday.
+    """
+    prev_mon, prev_sun = get_previous_week_window(today)
+
+    results_labels = []
+    results_values = []
+    results_colors = []
+
+    for block_id in range(1, NUM_BLOCKS + 1):
+        block_name = BLOCK_NAMES[block_id - 1]
+        rows = blocks_data[block_id]
+
+        sched_sum = 0.0
+        actual_sum = 0.0
+
+        # Weekly rows like: "Week 3 (10 Feb–16 Feb)"
+        for r in rows:
+            week_label = r["week"]
+            if "(" in week_label and "–" in week_label:
+                try:
+                    inside = week_label.split("(")[1].split(")")[0]
+                    d1_str, d2_str = inside.split("–")
+                    d1 = datetime.strptime(d1_str.strip() + f" {today.year}", "%d %b %Y").date()
+                    d2 = datetime.strptime(d2_str.strip() + f" {today.year}", "%d %b %Y").date()
+                except Exception:
+                    continue
+            else:
+                continue
+
+            # Skip weeks outside the previous-week window
+            if d2 < prev_mon or d1 > prev_sun:
+                continue
+
+            s = safe_float(r.get("scheduled"))
+            a = safe_float(r.get("actual"))
+            e = safe_float(r.get("eff_rain"))
+
+            if s is not None:
+                sched_sum += s
+            if a is not None:
+                actual_sum += a
+            if e is not None:
+                actual_sum += e
+
+        if sched_sum > 0:
+            pct = round((actual_sum / sched_sum) * 100, 1)
+        else:
+            pct = None
+
+        if pct is None:
+            continue
+
+        results_labels.append(block_name)
+        results_values.append(pct)
+        results_colors.append(pct_color(pct))
+
+    return results_labels, results_values, results_colors
+
+
+def extract_agronomy_previous_week(today):
+    """
+    Extract previous-week agronomy: gain + cumulative.
+    Uses calendar previous week (Mon–Sun) to pick the row.
+    """
+    prev_mon, prev_sun = get_previous_week_window(today)
+
+    labels = []
+    weekly = []
+    cum = []
+
+    for block_id in range(1, NUM_BLOCKS + 1):
+        block_name = BLOCK_NAMES[block_id - 1]
+        init_agronomy_rows(block_id)
+        rows = agronomy_data[block_id]
+
+        selected_gain = None
+        selected_cum = None
+
+        for r in rows:
+            week_label = r["week"]
+            if "(" in week_label and "–" in week_label:
+                try:
+                    inside = week_label.split("(")[1].split(")")[0]
+                    d1_str, d2_str = inside.split("–")
+                    d1 = datetime.strptime(d1_str.strip() + f" {today.year}", "%d %b %Y").date()
+                    d2 = datetime.strptime(d2_str.strip() + f" {today.year}", "%d %b %Y").date()
+                except Exception:
+                    continue
+            else:
+                continue
+
+            if d2 < prev_mon or d1 > prev_sun:
+                continue
+
+            selected_gain = safe_float(r.get("gain"))
+            selected_cum = safe_float(r.get("cumulative"))
+            break
+
+        labels.append(block_name)
+        weekly.append(selected_gain if selected_gain is not None else 0)
+        cum.append(selected_cum if selected_cum is not None else 0)
+
+    return labels, weekly, cum
 
 
 def fetch_forecast():
@@ -893,7 +1030,6 @@ def index():
             comparison_labels.append(name)
             comparison_values.append(total_mm)
             comparison_colors.append("#2e7d32")  # green bars for totals
-
     if view_mode == "week":
         comparison_title = "Irrigation Block Performance – Weekly % of Schedule"
         comparison_y_label = "% of scheduled water"
@@ -902,9 +1038,16 @@ def index():
         comparison_y_label = "Total depth (mm)"
 
     # ---------------------------
+    # 3B. PREVIOUS WEEK IRRIGATION
+    # ---------------------------
+    prev_irrig_labels, prev_irrig_values, prev_irrig_colors = extract_irrigation_previous_week(today)
+
+    # ---------------------------
     # 4. Filtered blocks chart (max 6)
     # ---------------------------
     selected_ids = []
+
+  
     for val in request.args.getlist("filter_block"):
         try:
             bid = int(val)
@@ -964,6 +1107,21 @@ def index():
     forecast_chart_labels = fc["chart_labels"]
     forecast_chart_temp = fc["chart_temp"]
     forecast_chart_rain = fc["chart_rain"]
+    # ---------------------------
+    # 5B. PREVIOUS WEEK WEATHER (CALENDAR)
+    # ---------------------------
+    prev_mon, prev_sun = get_previous_week_window(today)
+    prev_weather_rows = extract_weather_range(prev_mon, prev_sun)
+
+    prev_weather_chart_labels = [r["date_str"] for r in prev_weather_rows]
+    prev_weather_chart_temp = [
+        safe_float(r["tmax"]) if safe_float(r["tmax"]) is not None else None
+        for r in prev_weather_rows
+    ]
+    prev_weather_chart_rain = [
+        safe_float(r["rain"]) if safe_float(r["rain"]) is not None else 0
+        for r in prev_weather_rows
+    ]
 
     # ---------------------------
     # 6. Agronomy snapshot arrays
@@ -978,6 +1136,10 @@ def index():
         agro_labels.append(name)
         agro_weekly.append(weekly_gain if weekly_gain is not None else 0)
         agro_cum.append(cum_height if cum_height is not None else 0)
+    # ---------------------------
+    # 6B. PREVIOUS WEEK AGRONOMY
+    # ---------------------------
+    prev_agro_labels, prev_agro_weekly, prev_agro_cum =  extract_agronomy_previous_week(today)
 
     # ---------------------------
     # 7. Latest soil moisture balance (per block)
@@ -1057,6 +1219,21 @@ def index():
         avg_ndvi_by_block=avg_ndvi_by_block,
         pest_counts=pest_counts,
         growth_by_block=growth_by_block,
+        # Previous week irrigation
+        prev_irrig_labels=prev_irrig_labels,
+        prev_irrig_values=prev_irrig_values,
+        prev_irrig_colors=prev_irrig_colors,
+
+        # Previous week weather
+        prev_weather_rows=prev_weather_rows,
+        prev_weather_chart_labels=prev_weather_chart_labels,
+        prev_weather_chart_temp=prev_weather_chart_temp,
+        prev_weather_chart_rain=prev_weather_chart_rain,
+
+        # Previous week agronomy
+        prev_agro_labels=prev_agro_labels,
+        prev_agro_weekly=prev_agro_weekly,
+        prev_agro_cum=prev_agro_cum,
         tv_mode=tv_mode,
     )
 
