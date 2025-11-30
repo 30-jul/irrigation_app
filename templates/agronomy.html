@@ -2,6 +2,7 @@
 {% block content %}
 <div class="container-fluid mt-4">
 
+  <!-- Header -->
   <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="mb-0 text-success fw-bold">
       Agronomy – {{ block_name }}
@@ -37,14 +38,37 @@
     </div>
   </div>
 
-  <!-- Growth charts -->
+  <!-- Growth charts (upgraded) -->
   <div class="card mb-4 shadow-sm">
     <div class="card-header bg-success text-white">
-      Growth Trend – Weekly Gain vs Cumulative Height
+      <div class="d-flex justify-content-between align-items-center">
+        <span>Growth Trend – Weekly Gain vs Cumulative Height</span>
+
+        <!-- Chart controls -->
+        <div class="btn-group btn-group-sm">
+          <button type="button" id="growthResetZoomBtn" class="btn btn-outline-light">
+            Reset zoom
+          </button>
+          <button type="button" id="growthDownloadBtn" class="btn btn-outline-light">
+            Download
+          </button>
+          <button type="button" id="growthLineBtn" class="btn btn-light">
+            Line
+          </button>
+          <button type="button" id="growthBarBtn" class="btn btn-outline-light">
+            Bar
+          </button>
+          <button type="button" id="growthMixedBtn" class="btn btn-outline-light">
+            Mixed
+          </button>
+        </div>
+      </div>
     </div>
-    <div class="card-body" style="height:400px;">
-      <div class="scroll-x">
-        <canvas id="growthChart" height="90"></canvas>
+
+    <div class="card-body">
+      <!-- Fixed-height wrapper so chart is tall & readable -->
+      <div style="width:100%; height:650px; position:relative;">
+        <canvas id="growthChart"></canvas>
       </div>
     </div>
   </div>
@@ -70,7 +94,7 @@
         </div>
 
         <!-- Scrollable agronomy table -->
-        <div class="scroll-x">
+        <div class="scroll-x" style="max-height:260px; overflow-y:auto;">
           <table class="table table-sm table-striped align-middle mb-0">
             <thead class="table-success text-center">
               <tr>
@@ -122,55 +146,153 @@
 
 </div>
 
-<!-- Chart.js -->
+<!-- Chart.js + Zoom plugin -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+
 <script>
   const agroLabels = {{ chart_labels|tojson }};
   const agroGains  = {{ chart_gains|tojson }};
   const agroCums   = {{ chart_cums|tojson }};
 
-  const ctx = document.getElementById('growthChart').getContext('2d');
-  new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: agroLabels,
-      datasets: [
-        {
-          label: 'Weekly gain (cm)',
-          data: agroGains,
-          borderColor: '#198754',
-          backgroundColor: 'rgba(25,135,84,0.2)',
-          tension: 0.3,
-          pointRadius: 2
-        },
-        {
-          label: 'Cumulative height (cm)',
-          data: agroCums,
-          borderColor: '#0d6efd',
-          backgroundColor: 'rgba(13,110,253,0.15)',
-          tension: 0.3,
-          pointRadius: 2,
-          yAxisID: 'y1'
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: {
-          title: { display: true, text: 'Weekly gain (cm)' }
-        },
-        y1: {
-          position: 'right',
-          grid: { drawOnChartArea: false },
-          title: { display: true, text: 'Cumulative (cm)' }
-        }
+  const growthCtx = document.getElementById('growthChart').getContext('2d');
+
+  // start in line mode
+  let growthMode = 'line';
+
+  function buildGrowthChart() {
+    const isMixed = (growthMode === 'mixed');
+
+    return new Chart(growthCtx, {
+      type: isMixed ? 'line' : growthMode,  // base type
+
+      data: {
+        labels: agroLabels,
+        datasets: [
+          {
+            label: 'Weekly gain (cm)',
+            data: agroGains,
+            type: isMixed ? 'bar' : growthMode,
+            borderColor: '#198754',
+            backgroundColor: 'rgba(25,135,84,0.20)',
+            tension: 0.3,
+            pointRadius: 2
+          },
+          {
+            label: 'Cumulative height (cm)',
+            data: agroCums,
+            type: 'line',
+            borderColor: '#0d6efd',
+            backgroundColor: 'rgba(13,110,253,0.15)',
+            tension: 0.3,
+            pointRadius: 2,
+            yAxisID: 'y1'
+          }
+        ]
       },
-      plugins: {
-        legend: { position: 'bottom' }
+
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        resizeDelay: 0,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+
+        scales: {
+          x: {
+            ticks: {
+              autoSkip: true,
+              maxTicksLimit: 12,
+              maxRotation: 25,
+              minRotation: 0
+            }
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: 'Weekly gain (cm)' }
+          },
+          y1: {
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            title: { display: true, text: 'Cumulative (cm)' }
+          }
+        },
+
+        plugins: {
+          legend: { position: 'bottom' },
+          zoom: {
+            zoom: {
+              wheel: { enabled: true },
+              pinch: { enabled: true },
+              mode: 'x'
+            },
+            pan: {
+              enabled: true,
+              mode: 'x'
+            }
+          }
+        }
       }
+    });
+  }
+
+  let growthChart = buildGrowthChart();
+
+  // ---- Controls ----
+  function setGrowthMode(mode) {
+    growthMode = mode;
+    if (growthChart) {
+      growthChart.destroy();
     }
+    growthChart = buildGrowthChart();
+    updateGrowthButtons(mode);
+  }
+
+  function updateGrowthButtons(active) {
+    const lineBtn  = document.getElementById('growthLineBtn');
+    const barBtn   = document.getElementById('growthBarBtn');
+    const mixedBtn = document.getElementById('growthMixedBtn');
+    const all = [lineBtn, barBtn, mixedBtn];
+
+    all.forEach(btn => {
+      if (!btn) return;
+      btn.classList.remove('btn-light');
+      btn.classList.remove('btn-outline-light');
+      btn.classList.add('btn-outline-light');
+    });
+
+    let activeBtn = null;
+    if (active === 'line')  activeBtn = lineBtn;
+    if (active === 'bar')   activeBtn = barBtn;
+    if (active === 'mixed') activeBtn = mixedBtn;
+
+    if (activeBtn) {
+      activeBtn.classList.remove('btn-outline-light');
+      activeBtn.classList.add('btn-light');
+    }
+  }
+
+  updateGrowthButtons('line');
+
+  // Button wiring
+  document.getElementById('growthLineBtn').addEventListener('click', () => setGrowthMode('line'));
+  document.getElementById('growthBarBtn').addEventListener('click', () => setGrowthMode('bar'));
+  document.getElementById('growthMixedBtn').addEventListener('click', () => setGrowthMode('mixed'));
+
+  // Reset zoom
+  document.getElementById('growthResetZoomBtn').addEventListener('click', () => {
+    if (growthChart && growthChart.resetZoom) {
+      growthChart.resetZoom();
+    }
+  });
+
+  // Download PNG
+  document.getElementById('growthDownloadBtn').addEventListener('click', () => {
+    if (!growthChart) return;
+    const link = document.createElement('a');
+    link.href = growthChart.toBase64Image('image/png', 1.0);
+    link.download = `Growth_Trend_{{ block_name|replace(' ', '_') }}.png`;
+    link.click();
   });
 </script>
 {% endblock %}

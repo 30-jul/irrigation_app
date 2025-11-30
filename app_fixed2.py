@@ -535,6 +535,35 @@ def compute_soil_balance(block_id: int):
             balance = 0
 
     return round(balance, 1)
+def soil_pct_color(balance, tam):
+    """
+    Return (pct, colour_hex) based on balance/TAM * 100.
+
+    Colour bands:
+      blue       95–100%
+      light blue 90–94%
+      green      70–89%
+      orange     50–69%
+      red        <50%
+    """
+    if balance is None or tam is None or tam <= 0:
+        return 0.0, "#bdbdbd"  # grey for missing
+
+    pct = (float(balance) / float(tam)) * 100.0
+
+    if pct >= 95:
+        colour = "#1565c0"   # blue
+    elif pct >= 90:
+        colour = "#42a5f5"   # light blue
+    elif pct >= 70:
+        colour = "#2e7d32"   # green
+    elif pct >= 50:
+        colour = "#fb8c00"   # orange
+    else:
+        colour = "#c62828"   # red
+
+    return pct, colour
+
 
 
 # ---------------------------------------------------
@@ -1145,12 +1174,26 @@ def index():
     # 7. Latest soil moisture balance (per block)
     # ---------------------------
     latest_balances = {}
+
     for block_id in range(1, NUM_BLOCKS + 1):
+        name = BLOCK_NAMES[block_id - 1]
+
         try:
             bal = compute_soil_balance(block_id)
         except Exception:
             bal = None
-        latest_balances[BLOCK_NAMES[block_id - 1]] = {"balance": bal if bal is not None else 0}
+
+        bal_val = bal if bal is not None else 0.0
+        tam = soil_manual[block_id].get("start_balance", MAX_DEFICIT_BALANCE)
+
+        pct, colour = soil_pct_color(bal_val, tam)
+
+        latest_balances[name] = {
+            "balance": round(bal_val, 1),
+            "tam": float(tam),
+            "pct": round(pct, 1),
+            "color": colour
+        }
 
     # ---------------------------
     # 8. NDVI averages by block
@@ -1178,7 +1221,9 @@ def index():
         name = BLOCK_NAMES[rec["block_id"] - 1]
         pest_counts[name] += 1
 
-    # (Optional) simple growth dict if needed elsewhere
+    # ---------------------------
+    # Growth snapshot (optional)
+    # ---------------------------
     growth_by_block = {}
     for block_id in range(1, NUM_BLOCKS + 1):
         weekly_gain, cum_height = agronomy_weekly_and_cum(block_id, today)
@@ -1187,6 +1232,9 @@ def index():
             "cumulative": cum_height,
         }
 
+    # ----------------------------------------------------
+    # RETURN TEMPLATE (correct indentation)
+    # ----------------------------------------------------
     return render_template(
         "index.html",
         today=today,
@@ -1214,7 +1262,6 @@ def index():
         agro_weekly=agro_weekly,
         agro_cum=agro_cum,
         num_blocks=NUM_BLOCKS,
-        block_id=0,
         latest_balances=latest_balances,
         avg_ndvi_by_block=avg_ndvi_by_block,
         pest_counts=pest_counts,
@@ -1223,19 +1270,18 @@ def index():
         prev_irrig_labels=prev_irrig_labels,
         prev_irrig_values=prev_irrig_values,
         prev_irrig_colors=prev_irrig_colors,
-
         # Previous week weather
         prev_weather_rows=prev_weather_rows,
         prev_weather_chart_labels=prev_weather_chart_labels,
         prev_weather_chart_temp=prev_weather_chart_temp,
         prev_weather_chart_rain=prev_weather_chart_rain,
-
         # Previous week agronomy
         prev_agro_labels=prev_agro_labels,
         prev_agro_weekly=prev_agro_weekly,
         prev_agro_cum=prev_agro_cum,
         tv_mode=tv_mode,
     )
+  
 
 
 # --------- WEATHER DATA MANAGEMENT PAGE ---------

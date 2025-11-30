@@ -153,7 +153,7 @@
 
         </div>
         <div class="card-body"
-             style="{% if tv_mode %}height:320px;{% else %}height:220px;{% endif %}">
+             style="{% if tv_mode %}height:360px;{% else %}height:260px;{% endif %}">
           <canvas id="blockComparisonChart"></canvas>
         </div>
       </div>
@@ -178,7 +178,7 @@
             <button class="btn btn-sm btn-primary mt-2 w-100">Apply Filter</button>
           </form>
 
-          <div style="height:200px;">
+          <div style="height:220px;">
             <canvas id="blockFilterChart"></canvas>
           </div>
         </div>
@@ -219,7 +219,7 @@
             </table>
           </div>
 
-          <div style="{% if tv_mode %}height:260px;{% else %}height:180px;{% endif %}">
+          <div style="{% if tv_mode %}height:260px;{% else %}height:200px;{% endif %}">
             <canvas id="forecastChart"></canvas>
           </div>
         </div>
@@ -245,7 +245,7 @@
           </div>
         </div>
         <div class="card-body"
-             style="{% if tv_mode %}height:320px;{% else %}height:200px;{% endif %}">
+             style="{% if tv_mode %}height:360px;{% else %}height:260px;{% endif %}">
           <canvas id="agronomyChart"></canvas>
         </div>
       </div>
@@ -260,7 +260,7 @@
           <h5 class="mb-0">Soil Moisture Balance (Latest by Block)</h5>
         </div>
         <div class="card-body"
-             style="{% if tv_mode %}height:320px;{% else %}height:220px;{% endif %}">
+             style="{% if tv_mode %}height:360px;{% else %}height:260px;{% endif %}">
           <canvas id="soilChart"></canvas>
         </div>
       </div>
@@ -275,7 +275,7 @@
         <div class="card-header">
           <h5 class="mb-0">Irrigation Block Performance – Previous Week % of Schedule</h5>
         </div>
-        <div class="card-body" style="height:320px;">
+        <div class="card-body" style="height:360px;">
           <canvas id="prevIrrigChart"></canvas>
         </div>
       </div>
@@ -289,7 +289,7 @@
         <div class="card-header">
           <h5 class="mb-0">Last Week Weather – Tmax & Rain</h5>
         </div>
-        <div class="card-body" style="height:320px;">
+        <div class="card-body" style="height:360px;">
           <canvas id="prevWeatherChart"></canvas>
         </div>
       </div>
@@ -303,7 +303,7 @@
         <div class="card-header">
           <h5 class="mb-0">Growth Measurements – Previous Week (Weekly Gain & Cumulative)</h5>
         </div>
-        <div class="card-body" style="height:340px;">
+        <div class="card-body" style="height:380px;">
           <canvas id="prevAgroChart"></canvas>
         </div>
       </div>
@@ -320,10 +320,18 @@
   .tv-mode .card { border-width: 2px; box-shadow: 0 8px 24px rgba(0,0,0,0.18); }
   .tv-mode .card-body { font-size: 1.2rem; }
   .tv-mode table { font-size: 1.05rem; }
+
+  /* Soil moisture colour palette – same as block.html */
+  .sm-blue       { background-color: #3b82f6 !important; color:white !important; }
+  .sm-lightblue  { background-color: #93c5fd !important; color:black !important; }
+  .sm-green      { background-color: #86efac !important; color:black !important; }
+  .sm-orange     { background-color: #fdba74 !important; color:black !important; }
+  .sm-red        { background-color: #fca5a5 !important; color:black !important; }
 </style>
 
-<!-- Chart.js -->
+<!-- Chart.js + zoom plugin -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
 
 <script>
 /* -------- DATA FROM FLASK -------- */
@@ -338,7 +346,9 @@ const filterColors = {{ filter_colors|tojson }};
 
 const forecastLabels = {{ forecast_chart_labels|tojson }};
 const forecastTemps = {{ forecast_chart_temp|tojson }};
-const forecastRain = {{ forecast_chart_rain|tojson }};
+const forecastRain  = {{ forecast_chart_rain|tojson }};
+/* emojis for tooltip */
+const forecastEmojis = {{ forecast_days | map(attribute='emoji') | list | tojson }};
 
 const blockNames = {{ block_names|tojson }};
 const agroWeekly = {{ agro_weekly|tojson }};
@@ -386,6 +396,7 @@ new Chart(document.getElementById('blockComparisonChart'), {
   options: {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
     scales: {
       x: {
         ticks: { autoSkip: false, maxRotation: 45, minRotation: 25 },
@@ -393,6 +404,17 @@ new Chart(document.getElementById('blockComparisonChart'), {
         barPercentage: 0.7
       },
       y: { beginAtZero: true }
+    },
+    plugins: {
+      legend: { position: 'top' },
+      zoom: {
+        zoom: {
+          wheel: { enabled: true },
+          pinch: { enabled: true },
+          mode: 'x'
+        },
+        pan: { enabled: true, mode: 'x' }
+      }
     }
   }
 });
@@ -414,6 +436,7 @@ new Chart(document.getElementById('blockFilterChart'), {
   options: {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: 'index', intersect: false },
     scales: {
       x: {
         ticks: { autoSkip: false, maxRotation: 45, minRotation: 25 },
@@ -421,22 +444,36 @@ new Chart(document.getElementById('blockFilterChart'), {
         barPercentage: 0.7
       },
       y: { beginAtZero: true }
+    },
+    plugins: {
+      legend: { display: false },
+      zoom: {
+        zoom: {
+          wheel: { enabled: true },
+          pinch: { enabled: true },
+          mode: 'x'
+        },
+        pan: { enabled: true, mode: 'x' }
+      }
     }
   }
 });
 {% endif %}
 
-/* -------- FORECAST CHART -------- */
+/* -------- FORECAST CHART (with dates + colours + emojis) -------- */
 new Chart(document.getElementById('forecastChart'), {
   type: 'bar',
   data: {
-    labels: forecastLabels,
+    labels: forecastLabels,   // "Mon 25 Nov", etc (from backend)
     datasets: [
       {
         type: 'line',
-        label: 'Temp (°C)',
+        label: 'Temperature (°C)',
         data: forecastTemps,
         borderWidth: 2,
+        borderColor: '#ff9800',              // orange line
+        pointBackgroundColor: '#ff9800',
+        pointRadius: 3,
         tension: 0.3,
         yAxisID: 'y'
       },
@@ -444,6 +481,9 @@ new Chart(document.getElementById('forecastChart'), {
         type: 'bar',
         label: 'Rain (mm)',
         data: forecastRain,
+        backgroundColor: 'rgba(33,150,243,0.5)', // blue bars
+        borderColor: '#2196f3',
+        borderWidth: 1,
         yAxisID: 'y1'
       }
     ]
@@ -454,18 +494,48 @@ new Chart(document.getElementById('forecastChart'), {
     interaction: { mode: 'index', intersect: false },
     scales: {
       x: {
-        ticks: { autoSkip: false, maxRotation: 45, minRotation: 25 }
+        ticks: {
+          autoSkip: false,
+          maxRotation: 60,
+          minRotation: 40,
+          font: { size: 12 }
+        },
+        title: {
+          display: true,
+          text: 'Day & Date'
+        }
       },
       y: {
         beginAtZero: true,
         position: 'left',
-        title: { display: true, text: 'Temp (°C)' }
+        title: { display: true, text: 'Temperature (°C)' }
       },
       y1: {
         beginAtZero: true,
         position: 'right',
         grid: { drawOnChartArea: false },
         title: { display: true, text: 'Rain (mm)' }
+      }
+    },
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: {
+        callbacks: {
+          title: function (ctx) {
+            const idx   = ctx[0].dataIndex;
+            const label = forecastLabels[idx] || '';
+            const icon  = forecastEmojis[idx] || '';
+            return (icon ? icon + ' ' : '') + label;
+          }
+        }
+      },
+      zoom: {
+        zoom: {
+          wheel: { enabled: true },
+          pinch: { enabled: true },
+          mode: 'x'
+        },
+        pan: { enabled: true, mode: 'x' }
       }
     }
   }
@@ -514,7 +584,15 @@ let agroChart = new Chart(agroCtx, {
       }
     },
     plugins: {
-      legend: { position: 'top' }
+      legend: { position: 'top' },
+      zoom: {
+        zoom: {
+          wheel: { enabled: true },
+          pinch: { enabled: true },
+          mode: 'x'
+        },
+        pan: { enabled: true, mode: 'x' }
+      }
     }
   }
 });
@@ -530,9 +608,42 @@ function showAgroMode(mode){
   agroChart.update();
 }
 
-/* -------- SOIL MOISTURE BALANCE -------- */
+/* -------- SOIL MOISTURE BALANCE (COLOURED BARS) -------- */
+
+// Helper to get colour HEX from % of TAM
+function soilColourFromPercent(pct) {
+  if (pct >= 95) return '#3b82f6';      // blue
+  if (pct >= 90) return '#93c5fd';      // light blue
+  if (pct >= 70) return '#86efac';      // green
+  if (pct >= 50) return '#fdba74';      // orange
+  return '#fca5a5';                     // red
+}
+
 const soilLabels = Object.keys(soilRaw);
-const soilValues = soilLabels.map(name => soilRaw[name].balance || 0);
+const soilValues = [];
+const soilColors = [];
+
+soilLabels.forEach(name => {
+  const entry = soilRaw[name] || {};
+  const balance = Number(entry.balance) || 0;
+
+  // Try to read TAM / start balance / percent if provided by backend
+  const tam =
+    Number(entry.tam) ||
+    Number(entry.TAM) ||
+    Number(entry.start_balance) ||
+    Number(entry.tam_mm) || 0;
+
+  let pct = 0;
+  if (tam > 0) {
+    pct = (balance / tam) * 100.0;
+  } else if (typeof entry.percent !== 'undefined') {
+    pct = Number(entry.percent) || 0;
+  }
+
+  soilValues.push(balance);
+  soilColors.push(soilColourFromPercent(pct));
+});
 
 if (document.getElementById('soilChart')) {
   const ctxSoil = document.getElementById('soilChart').getContext('2d');
@@ -542,12 +653,16 @@ if (document.getElementById('soilChart')) {
       labels: soilLabels,
       datasets: [{
         label: 'Current Balance (mm TAM)',
-        data: soilValues
+        data: soilValues,
+        backgroundColor: soilColors,
+        borderColor: soilColors,
+        borderWidth: 1
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       scales: {
         x: {
           ticks: { autoSkip: false, maxRotation: 45, minRotation: 25 },
@@ -559,7 +674,17 @@ if (document.getElementById('soilChart')) {
           title: { display: true, text: 'Soil moisture balance (mm TAM)' }
         }
       },
-      plugins: { legend: { display: false } }
+      plugins: {
+        legend: { display: false },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x'
+          },
+          pan: { enabled: true, mode: 'x' }
+        }
+      }
     }
   });
 }
@@ -606,7 +731,19 @@ if (document.getElementById('prevIrrigChart')) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      scales: { y: { beginAtZero: true } }
+      interaction: { mode: 'index', intersect: false },
+      scales: { y: { beginAtZero: true } },
+      plugins: {
+        legend: { position: 'top' },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x'
+          },
+          pan: { enabled: true, mode: 'x' }
+        }
+      }
     }
   });
 }
@@ -636,7 +773,18 @@ if (document.getElementById('prevWeatherChart')) {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      scales: { y: { beginAtZero: true } }
+      scales: { y: { beginAtZero: true } },
+      plugins: {
+        legend: { position: 'top' },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x'
+          },
+          pan: { enabled: true, mode: 'x' }
+        }
+      }
     }
   });
 }
@@ -674,7 +822,17 @@ if (document.getElementById('prevAgroChart')) {
           title: { display: true, text: 'Height (cm)' }
         }
       },
-      plugins: { legend: { position: 'top' } }
+      plugins: {
+        legend: { position: 'top' },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x'
+          },
+          pan: { enabled: true, mode: 'x' }
+        }
+      }
     }
   });
 }

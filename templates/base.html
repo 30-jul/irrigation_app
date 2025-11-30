@@ -1,4 +1,4 @@
-<!DOCTYPE html>  
+<!DOCTYPE html>   
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
@@ -22,6 +22,8 @@
         body {
             background: radial-gradient(circle at top left, #e8f5e9 0, #f5f7fa 40%, #eef7ff 100%);
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
         /* NAVBAR */
@@ -67,6 +69,7 @@
         .page-shell {
             padding-top: 0.8rem;
             padding-bottom: 1.5rem;
+            flex: 1 0 auto;  /* so footer sits at bottom */
         }
 
         /* CARDS */
@@ -143,6 +146,19 @@
         .scroll-x::-webkit-scrollbar-thumb {
             background: var(--gf-mid);
             border-radius: 4px;
+        }
+
+        /* FOOTER BRANDING */
+        .dev-footer {
+            background: #006838; /* GreenFuel dark green */
+            color: #ffffff;
+            font-size: 0.85rem;
+            letter-spacing: 0.4px;
+            border-top: 3px solid #00a651; /* light green highlight */
+            font-family: "Segoe UI", Arial, sans-serif;
+            text-align: center;
+            padding: 0.35rem 0.5rem;
+            flex-shrink: 0;
         }
     </style>
 </head>
@@ -262,6 +278,11 @@
     {% block content %}{% endblock %}
 </div>
 
+<!-- FOOTER BRANDING -->
+<footer class="dev-footer">
+    Website developed by <strong>Progress M. Sengera</strong>
+</footer>
+
 {% block extra_scripts %}{% endblock %}
 
 <!-- Bootstrap JS -->
@@ -269,4 +290,3 @@
 
 </body>
 </html>
-

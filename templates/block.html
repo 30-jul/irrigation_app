@@ -1,5 +1,15 @@
 {% extends "base.html" %} 
 {% block content %}
+
+<!-- Soil moisture colour classes (also used on dashboard-style card header) -->
+<style>
+  .sm-blue       { background-color: #3b82f6 !important; color:white !important; }
+  .sm-lightblue  { background-color: #93c5fd !important; color:black !important; }
+  .sm-green      { background-color: #86efac !important; color:black !important; }
+  .sm-orange     { background-color: #fdba74 !important; color:black !important; }
+  .sm-red        { background-color: #fca5a5 !important; color:black !important; }
+</style>
+
 <div class="container-fluid mt-4">
 
   <!-- Header -->
@@ -44,14 +54,37 @@
     </div>
   </div>
 
-  <!-- Irrigation chart -->
+  <!-- Irrigation chart (upgraded) -->
   <div class="card mb-4 shadow-sm">
     <div class="card-header bg-success text-white">
-      Weekly Irrigation – Scheduled vs Actual + Eff. Rain
+      <div class="d-flex justify-content-between align-items-center">
+        <span>Weekly Irrigation – Scheduled vs Actual + Eff. Rain</span>
+
+        <!-- Chart controls -->
+        <div class="btn-group btn-group-sm">
+          <button type="button" id="modeBarBtn" class="btn btn-light">
+            Bars
+          </button>
+          <button type="button" id="modeLineBtn" class="btn btn-outline-light">
+            Lines
+          </button>
+          <button type="button" id="modeMixedBtn" class="btn btn-outline-light">
+            Mixed
+          </button>
+          <button type="button" id="resetZoomBtn" class="btn btn-outline-light">
+            Reset zoom
+          </button>
+          <button type="button" id="downloadPngBtn" class="btn btn-outline-light">
+            Download
+          </button>
+        </div>
+      </div>
     </div>
+
     <div class="card-body">
-      <div class="scroll-x">
-        <canvas id="irrigChart" height="80"></canvas>
+      <!-- Fixed-height wrapper so the chart is tall & readable -->
+      <div style="width:100%; height:650px; position:relative;">
+        <canvas id="irrigChart"></canvas>
       </div>
     </div>
   </div>
@@ -83,7 +116,7 @@
         </div>
 
         <!-- Scrollable weekly schedule table -->
-        <div class="scroll-x">
+        <div class="scroll-x" style="max-height:260px; overflow-y:auto;">
           <table class="table table-sm table-striped align-middle mb-0">
             <thead class="table-success text-center">
               <tr>
@@ -98,7 +131,7 @@
             <tbody>
               {% for row in rows %}
               {% set i = loop.index0 %}
-              <tr class="text-center">
+              <tr class="text-center js-irrig-row">
                 <td class="text-start">
                   <input type="text" name="week_{{ i }}" value="{{ row.week }}"
                          class="form-control form-control-sm">
@@ -106,21 +139,22 @@
                 <td>
                   <input type="number" step="0.1" name="scheduled_{{ i }}"
                          value="{{ row.scheduled }}"
-                         class="form-control form-control-sm">
+                         class="form-control form-control-sm js-sched">
                 </td>
                 <td>
                   <input type="number" step="0.1" name="actual_{{ i }}"
                          value="{{ row.actual }}"
-                         class="form-control form-control-sm">
+                         class="form-control form-control-sm js-actual">
                 </td>
                 <td>
                   <input type="number" step="0.1" name="effrain_{{ i }}"
                          value="{{ row.eff_rain }}"
-                         class="form-control form-control-sm">
+                         class="form-control form-control-sm js-effrain">
                 </td>
                 <td>
-                  <input type="text" value="{{ row.percent }}"
-                         class="form-control form-control-sm" readonly>
+                  <input type="text"
+                         value="{{ row.percent }}"
+                         class="form-control form-control-sm js-percent" readonly>
                 </td>
                 <td>
                   <input type="text" name="comment_{{ i }}" value="{{ row.comment }}"
@@ -131,12 +165,20 @@
             </tbody>
           </table>
         </div>
+
+        <!-- SAVE BUTTON FOR WEEKLY SCHEDULE -->
+        <div class="p-3 text-end">
+          <button type="submit" name="save_weekly" value="1" class="btn btn-success">
+            Save Weekly Schedule
+          </button>
+        </div>
       </div>
     </div>
 
     <!-- Soil moisture profit & loss -->
     <div class="card mb-4 shadow-sm">
-      <div class="card-header bg-success text-white">
+      <!-- Header doubles as "dashboard block card" with same SM colour logic -->
+      <div class="card-header bg-success text-white" id="soilCardHeader">
         Soil Moisture Profit & Loss – Manual Entries
       </div>
       <div class="card-body p-0">
@@ -168,7 +210,7 @@
             <tbody>
               {% for r in sm_rows %}
               {% set i = loop.index0 %}
-              <tr class="text-center">
+              <tr class="text-center js-soil-row">
                 <td>
                   <input type="date" name="sm_date_{{ i }}"
                          value="{{ r.date_str }}" class="form-control form-control-sm">
@@ -187,7 +229,10 @@
                          value="{{ r.irr_str }}"
                          class="form-control form-control-sm">
                 </td>
-                <td>{{ r.balance }}</td>
+                <!-- balance used for % + colour -->
+                <td class="js-soil-balance" data-val="{{ r.balance }}">
+                  {{ r.balance }}
+                </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -207,44 +252,285 @@
 
 </div>
 
+<!-- Chart.js + Zoom plugin -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+
 <script>
-  const irrLabels = {{ chart_labels|tojson }};
+  const irrLabels     = {{ chart_labels|tojson }};
   const scheduledVals = {{ chart_scheduled|tojson }};
   const actualVals    = {{ chart_actual|tojson }};
 
-  const irrCtx = document.getElementById('irrigChart').getContext('2d');
-  new Chart(irrCtx, {
+  const ctx = document.getElementById('irrigChart').getContext('2d');
+
+  // start in "mixed" mode
+  let currentMode = 'mixed';
+
+  function applyMode(chart, mode) {
+    currentMode = mode;
+
+    if (mode === 'bar') {
+      chart.data.datasets[0].type = 'bar';
+      chart.data.datasets[1].type = 'bar';
+    } else if (mode === 'line') {
+      chart.data.datasets[0].type = 'line';
+      chart.data.datasets[1].type = 'line';
+    } else { // mixed
+      chart.data.datasets[0].type = 'line'; // scheduled
+      chart.data.datasets[1].type = 'bar';  // actual + eff rain
+    }
+    chart.update();
+  }
+
+  const irrigChart = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: irrLabels,
       datasets: [
         {
           label: 'Scheduled (mm)',
-          data: scheduledVals
-          borderColor: '#0d6efd', 
-          backgroundColor: 'rgba(13,110,253,0.3)'
+          data: scheduledVals,
+          backgroundColor: 'rgba(13,110,253,0.30)',
+          borderColor: '#0d6efd',
+          borderWidth: 1
         },
         {
           label: 'Actual + Eff. Rain (mm)',
-          data: actualVals
+          data: actualVals,
+          backgroundColor: 'rgba(25,135,84,0.40)',
           borderColor: '#198754',
-          backgroundColor: 'rgba(25,135,84,0.4)'
+          borderWidth: 1
         }
       ]
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { position: 'bottom' }
-      },
+      maintainAspectRatio: false,
+      resizeDelay: 0,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
       scales: {
+        x: {
+          ticks: {
+            autoSkip: true,
+            maxTicksLimit: 12,
+            maxRotation: 30,
+            minRotation: 0
+          }
+        },
         y: {
           beginAtZero: true,
           title: { display: true, text: 'mm' }
         }
+      },
+      plugins: {
+        legend: { position: 'bottom' },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x'
+          },
+          pan: {
+            enabled: true,
+            mode: 'x'
+          }
+        }
       }
     }
+  });
+
+  // initial mode
+  applyMode(irrigChart, 'mixed');
+
+  // Update button styles
+  function updateModeButtons(active) {
+    const barBtn   = document.getElementById('modeBarBtn');
+    const lineBtn  = document.getElementById('modeLineBtn');
+    const mixedBtn = document.getElementById('modeMixedBtn');
+
+    const all = [barBtn, lineBtn, mixedBtn];
+    all.forEach(btn => {
+      if (!btn) return;
+      btn.classList.remove('btn-light');
+      btn.classList.remove('btn-outline-light');
+      btn.classList.add('btn-outline-light');
+    });
+
+    let activeBtn = null;
+    if (active === 'bar')   activeBtn = barBtn;
+    if (active === 'line')  activeBtn = lineBtn;
+    if (active === 'mixed') activeBtn = mixedBtn;
+
+    if (activeBtn) {
+      activeBtn.classList.remove('btn-outline-light');
+      activeBtn.classList.add('btn-light');
+    }
+  }
+
+  updateModeButtons('mixed');
+
+  // Mode buttons
+  const barBtn   = document.getElementById('modeBarBtn');
+  const lineBtn  = document.getElementById('modeLineBtn');
+  const mixedBtn = document.getElementById('modeMixedBtn');
+
+  if (barBtn) {
+    barBtn.addEventListener('click', () => {
+      applyMode(irrigChart, 'bar');
+      updateModeButtons('bar');
+    });
+  }
+  if (lineBtn) {
+    lineBtn.addEventListener('click', () => {
+      applyMode(irrigChart, 'line');
+      updateModeButtons('line');
+    });
+  }
+  if (mixedBtn) {
+    mixedBtn.addEventListener('click', () => {
+      applyMode(irrigChart, 'mixed');
+      updateModeButtons('mixed');
+    });
+  }
+
+  // Reset zoom
+  const resetZoomBtn = document.getElementById('resetZoomBtn');
+  if (resetZoomBtn) {
+    resetZoomBtn.addEventListener('click', () => {
+      if (irrigChart.resetZoom) {
+        irrigChart.resetZoom();
+      }
+    });
+  }
+
+  // Download PNG
+  const downloadBtn = document.getElementById('downloadPngBtn');
+  if (downloadBtn) {
+    downloadBtn.addEventListener('click', () => {
+      const link = document.createElement('a');
+      link.href = irrigChart.toBase64Image('image/png', 1.0);
+      link.download = `Block_Weekly_Irrigation_{{ block_name|replace(' ', '_') }}.png`;
+      link.click();
+    });
+  }
+
+  /* ===========================
+     AUTO % CALC + HIGHLIGHTING
+     =========================== */
+
+  function recalcRow(row) {
+    const schedInput = row.querySelector('.js-sched');
+    const actualInput = row.querySelector('.js-actual');
+    const effInput = row.querySelector('.js-effrain');
+    const pctInput = row.querySelector('.js-percent');
+
+    if (!schedInput || !actualInput || !effInput || !pctInput) return;
+
+    const sched = parseFloat(schedInput.value) || 0;
+    const actual = parseFloat(actualInput.value) || 0;
+    const eff = parseFloat(effInput.value) || 0;
+
+    let pct = 0;
+    if (sched > 0) {
+      pct = ((actual + eff) / sched) * 100.0;
+      pctInput.value = pct.toFixed(0);   // whole % for dashboard
+    } else {
+      pctInput.value = '';
+    }
+
+    // Remove existing highlight classes
+    row.classList.remove('table-warning', 'table-danger');
+
+    // Highlight LOW and EXCESSIVE irrigation (still using these ranges)
+    if (sched > 0) {
+      if (pct < 80) {
+        row.classList.add('table-warning');
+      } else if (pct > 120) {
+        row.classList.add('table-danger');
+      }
+    }
+  }
+
+  function setupIrrigationTable() {
+    const rows = document.querySelectorAll('.js-irrig-row');
+    rows.forEach(row => {
+      // Recalculate on page load
+      recalcRow(row);
+
+      // Attach listeners for live recalculation
+      const inputs = row.querySelectorAll('.js-sched, .js-actual, .js-effrain');
+      inputs.forEach(inp => {
+        inp.addEventListener('input', () => recalcRow(row));
+      });
+    });
+  }
+
+  /* ===========================
+     SOIL MOISTURE COLOUR CODING
+     =========================== */
+
+  function getTam() {
+    const tamInput = document.querySelector('input[name="sm_start_balance"]');
+    const val = parseFloat(tamInput ? tamInput.value : '') || 0;
+    return val;
+  }
+
+  function soilPercent(balance, tam) {
+    if (!tam || tam <= 0) return 0;
+    return (balance / tam) * 100;
+  }
+
+  function soilColourClass(pct) {
+    if (pct >= 95) return 'sm-blue';
+    if (pct >= 90) return 'sm-lightblue';
+    if (pct >= 70) return 'sm-green';
+    if (pct >= 50) return 'sm-orange';
+    return 'sm-red';
+  }
+
+  function applySoilColours() {
+    const tam = getTam();
+    const rows = document.querySelectorAll('.js-soil-row');
+    let currentPct = null;
+
+    rows.forEach(row => {
+      const balCell = row.querySelector('.js-soil-balance');
+      if (!balCell) return;
+
+      const balance = parseFloat(balCell.dataset.val || balCell.textContent) || 0;
+      const pct = soilPercent(balance, tam);
+      currentPct = pct; // keep last row as "current" status
+
+      const cls = soilColourClass(pct);
+
+      row.classList.remove('sm-blue','sm-lightblue','sm-green','sm-orange','sm-red');
+      row.classList.add(cls);
+    });
+
+    // Colour the soil card header like a dashboard card using the current % (last row)
+    const header = document.getElementById('soilCardHeader');
+    if (header && currentPct !== null) {
+      const cls = soilColourClass(currentPct);
+      header.classList.remove('bg-success','text-white',
+                              'sm-blue','sm-lightblue','sm-green','sm-orange','sm-red');
+      header.classList.add(cls);
+    }
+  }
+
+  function setupSoilTable() {
+    applySoilColours();
+
+    // Re-apply colours whenever TAM changes
+    const tamInput = document.querySelector('input[name="sm_start_balance"]');
+    if (tamInput) {
+      tamInput.addEventListener('input', applySoilColours);
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    setupIrrigationTable();
+    setupSoilTable();
   });
 </script>
 {% endblock %}
