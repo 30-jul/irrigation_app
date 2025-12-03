@@ -588,9 +588,11 @@ def get_db():
     )
 
 def init_db():
-    """Create tables if they don't exist."""
+    """Create tables if they don't exist and auto-upgrade old schemas."""
     conn = get_db()
     cur = conn.cursor()
+
+    # --- WEATHER TABLE ---
     cur.execute("""
         CREATE TABLE IF NOT EXISTS weather (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -601,6 +603,8 @@ def init_db():
             et0 DOUBLE NULL
         )
     """)
+
+    # --- USERS ---
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -610,16 +614,19 @@ def init_db():
         )
     """)
 
+    # --- BLOCKS META ---
     cur.execute("""
         CREATE TABLE IF NOT EXISTS blocks_meta (
             block_id INT PRIMARY KEY,
-            name VARCHAR(50) NOT NULL,
+            name  VARCHAR(50) NOT NULL,
             cut_date DATE NULL,
             kc DOUBLE NULL,
             variety VARCHAR(50) NULL,
             sm_start_balance DOUBLE NULL
         )
     """)
+
+    # --- IRRIGATION WEEKS ---
     cur.execute("""
         CREATE TABLE IF NOT EXISTS irrigation_weeks (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -634,6 +641,8 @@ def init_db():
             UNIQUE KEY uniq_block_week (block_id, week_index)
         )
     """)
+
+    # --- SOIL MANUAL ENTRIES ---
     cur.execute("""
         CREATE TABLE IF NOT EXISTS soil_manual_entries (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -644,12 +653,14 @@ def init_db():
             UNIQUE KEY uniq_block_date (block_id, date)
         )
     """)
+
+    # --- AGRONOMY WEEKS (new schema) ---
     cur.execute("""
         CREATE TABLE IF NOT EXISTS agronomy_weeks (
             id INT AUTO_INCREMENT PRIMARY KEY,
             block_id INT NOT NULL,
             week_index INT NOT NULL,
-            week_label VARCHAR(100),     
+            week_label VARCHAR(100),
             standard_gain DOUBLE NULL,
             gain DOUBLE NULL,
             cumulative DOUBLE NULL,
@@ -658,6 +669,22 @@ def init_db():
             UNIQUE KEY uniq_agro_block_week (block_id, week_index)
         )
     """)
+
+    # 🔧 AUTO-UPGRADE: make sure old DBs get the standard_gain column
+    try:
+        cur.execute("ALTER TABLE agronomy_weeks ADD COLUMN standard_gain DOUBLE NULL")
+        conn.commit()
+        print("DB migration: added standard_gain column to agronomy_weeks.")
+    except Exception as e:
+        # If the column already exists, MySQL gives error 1060 (duplicate column name) – safe to ignore
+        try:
+            err_no = getattr(e, "errno", None)
+        except Exception:
+            err_no = None
+        if err_no != 1060:
+            print("Warning: could not ensure standard_gain column:", e)
+
+    # --- NDVI ---
     cur.execute("""
         CREATE TABLE IF NOT EXISTS ndvi_records (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -667,6 +694,8 @@ def init_db():
             biomass DOUBLE NULL
         )
     """)
+
+    # --- PESTS ---
     cur.execute("""
         CREATE TABLE IF NOT EXISTS pests_records (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -678,10 +707,10 @@ def init_db():
             action TEXT
         )
     """)
+
     conn.commit()
     cur.close()
     conn.close()
-
 
 # ------------ LOAD FROM DB INTO MEMORY ------------
 
