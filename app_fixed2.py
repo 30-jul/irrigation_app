@@ -118,6 +118,7 @@ def init_agronomy_rows(block_id: int):
             rows.append(
                 {
                     "week": f"Week {i}",
+                    "standard_gain":"",
                     "gain": "",
                     "cumulative": "",
                     "fertigation": "",
@@ -182,27 +183,30 @@ def season_total_mm(block_id: int):
             has_data = True
     return round(total, 1) if has_data else None
 
-
 def agronomy_weekly_and_cum(block_id: int, today: date):
-    """Return (weekly_gain, cumulative_growth) for current week for a block."""
+    """Return (standard_gain, weekly_gain, cumulative_growth) for current week for a block."""
     init_agronomy_rows(block_id)
     meta = block_meta[block_id]
     res = current_week_index(meta.get("cut_date"), today)
     if res is None:
-        return None, None
+        return None, None, None          # ← 3 values
     week_index, _, _ = res
 
     rows = agronomy_data[block_id]
     if week_index < 0 or week_index >= len(rows):
-        return None, None
+        return None, None, None          # ← 3 values
 
     row = rows[week_index]
+    std = safe_float(row.get("standard_gain"))
     g = safe_float(row.get("gain"))
     c = safe_float(row.get("cumulative"))
+
     return (
+        round(std, 1) if std is not None else None,
         round(g, 1) if g is not None else None,
         round(c, 1) if c is not None else None,
     )
+
 def pct_color(pct):
     """Colour for percentage bar (current week view)."""
     if pct is None:
@@ -645,7 +649,8 @@ def init_db():
             id INT AUTO_INCREMENT PRIMARY KEY,
             block_id INT NOT NULL,
             week_index INT NOT NULL,
-            week_label VARCHAR(100),
+            week_label VARCHAR(100),     
+            standard_gain DOUBLE NULL,
             gain DOUBLE NULL,
             cumulative DOUBLE NULL,
             fertigation VARCHAR(100),
@@ -699,8 +704,6 @@ def load_weather_from_db():
         )
     cur.close()
     conn.close()
-
-
 def load_blocks_from_db():
     # ensure base structure
     for bid in range(1, NUM_BLOCKS + 1):
@@ -710,7 +713,9 @@ def load_blocks_from_db():
     conn = get_db()
     cur = conn.cursor()
 
-    # blocks_meta
+    # ------------------------------------
+    # LOAD BLOCK META
+    # ------------------------------------
     cur.execute("SELECT block_id, name, cut_date, kc, variety, sm_start_balance FROM blocks_meta")
     for block_id, name, cut_date, kc, variety, sm_start_balance in cur.fetchall():
         if 1 <= block_id <= NUM_BLOCKS:
@@ -720,7 +725,9 @@ def load_blocks_from_db():
             if sm_start_balance is not None:
                 soil_manual[block_id]["start_balance"] = float(sm_start_balance)
 
-    # irrigation weeks
+    # ------------------------------------
+    # LOAD IRRIGATION WEEKS
+    # ------------------------------------
     cur.execute("""
         SELECT block_id, week_index, week_label, scheduled, actual, eff_rain, percent, comment
         FROM irrigation_weeks
@@ -735,7 +742,9 @@ def load_blocks_from_db():
             rows[week_index]["percent"] = "" if percent is None else str(percent)
             rows[week_index]["comment"] = comment or ""
 
-    # soil manual entries
+    # ------------------------------------
+    # LOAD SOIL MANUAL ENTRIES
+    # ------------------------------------
     cur.execute("SELECT block_id, date, eff, irr FROM soil_manual_entries")
     for block_id, d, eff, irr in cur.fetchall():
         if 1 <= block_id <= NUM_BLOCKS:
@@ -745,15 +754,20 @@ def load_blocks_from_db():
                 "irr": "" if irr is None else str(irr),
             }
 
-    # agronomy weeks
+    # ------------------------------------
+    # LOAD AGRONOMY WEEKS
+    # ------------------------------------
     cur.execute("""
-        SELECT block_id, week_index, week_label, gain, cumulative, fertigation, chemigation
+        SELECT block_id, week_index, week_label, standard_gain, gain, cumulative,
+               fertigation, chemigation
         FROM agronomy_weeks
     """)
-    for block_id, week_index, week_label, gain, cumulative, fert, chem in cur.fetchall():
+
+    for block_id, week_index, week_label, std_gain, gain, cumulative, fert, chem in cur.fetchall():
         if 1 <= block_id <= NUM_BLOCKS and 0 <= week_index < DEFAULT_ROWS:
             rows = agronomy_data[block_id]
             rows[week_index]["week"] = week_label or rows[week_index]["week"]
+            rows[week_index]["standard_gain"] = "" if std_gain is None else str(std_gain)
             rows[week_index]["gain"] = "" if gain is None else str(gain)
             rows[week_index]["cumulative"] = "" if cumulative is None else str(cumulative)
             rows[week_index]["fertigation"] = fert or ""
@@ -761,6 +775,7 @@ def load_blocks_from_db():
 
     cur.close()
     conn.close()
+
 
 
 def load_ndvi_from_db():
@@ -904,6 +919,7 @@ def save_agronomy_block_to_db(block_id):
     rows = agronomy_data[block_id]
     for i, r in enumerate(rows):
         week_label = r["week"]
+        std_gain = safe_float(r.get("standard_gain"))
         gain = safe_float(r.get("gain"))
         cumulative = safe_float(r.get("cumulative"))
         fert = r.get("fertigation") or None
@@ -911,10 +927,10 @@ def save_agronomy_block_to_db(block_id):
         cur.execute(
             """
             REPLACE INTO agronomy_weeks
-            (block_id, week_index, week_label, gain, cumulative, fertigation, chemigation)
-            VALUES (%s,%s,%s,%s,%s,%s,%s)
+            (block_id, week_index, week_label,standard_gain, gain, cumulative, fertigation, chemigation)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
             """,
-            (block_id, i, week_label, gain, cumulative, fert, chem),
+            (block_id, i, week_label, std_gain, gain, cumulative, fert, chem),
         )
     conn.commit()
     cur.close()
@@ -1152,19 +1168,37 @@ def index():
         for r in prev_weather_rows
     ]
 
-    # ---------------------------
+        # ---------------------------
     # 6. Agronomy snapshot arrays
     # ---------------------------
     agro_labels = []
+    agro_standard = []
     agro_weekly = []
     agro_cum = []
+    agro_colors = []        # ← ADD THIS ONE
+
+
 
     for block_id in range(1, NUM_BLOCKS + 1):
         name = BLOCK_NAMES[block_id - 1]
-        weekly_gain, cum_height = agronomy_weekly_and_cum(block_id, today)
+        standard_gain,weekly_gain, cum_height = agronomy_weekly_and_cum(block_id, today)
+
+        # Store values (0 if missing, so chart still draws)
         agro_labels.append(name)
+        agro_standard.append(standard_gain if standard_gain is not None else 0)
         agro_weekly.append(weekly_gain if weekly_gain is not None else 0)
         agro_cum.append(cum_height if cum_height is not None else 0)
+
+        # Colour coding:
+        #   blue  = weekly >= standard
+        #   red   = weekly < standard
+        #   grey  = missing data
+        if standard_gain is None or weekly_gain is None:
+            agro_colors.append("#bdbdbd")      # grey
+        elif weekly_gain >= standard_gain:
+            agro_colors.append("#1565c0")      # blue
+        else:
+            agro_colors.append("#c62828")      # red
     # ---------------------------
     # 6B. PREVIOUS WEEK AGRONOMY
     # ---------------------------
@@ -1194,7 +1228,6 @@ def index():
             "pct": round(pct, 1),
             "color": colour
         }
-
     # ---------------------------
     # 8. NDVI averages by block
     # ---------------------------
@@ -1222,18 +1255,19 @@ def index():
         pest_counts[name] += 1
 
     # ---------------------------
-    # Growth snapshot (optional)
+    # 10. Growth snapshot (optional)
     # ---------------------------
     growth_by_block = {}
     for block_id in range(1, NUM_BLOCKS + 1):
-        weekly_gain, cum_height = agronomy_weekly_and_cum(block_id, today)
+        # agronomy_weekly_and_cum now returns (standard, weekly, cumulative)
+        _, weekly_gain, cum_height = agronomy_weekly_and_cum(block_id, today)
         growth_by_block[BLOCK_NAMES[block_id - 1]] = {
             "weekly_gain": weekly_gain,
             "cumulative": cum_height,
         }
 
     # ----------------------------------------------------
-    # RETURN TEMPLATE (correct indentation)
+    # RETURN TEMPLATE
     # ----------------------------------------------------
     return render_template(
         "index.html",
@@ -1259,8 +1293,10 @@ def index():
         filter_colors=filter_colors,
         filter_selected_ids=selected_ids,
         agro_labels=agro_labels,
+        agro_standard=agro_standard,
         agro_weekly=agro_weekly,
         agro_cum=agro_cum,
+        agro_colors=agro_colors,
         num_blocks=NUM_BLOCKS,
         latest_balances=latest_balances,
         avg_ndvi_by_block=avg_ndvi_by_block,
@@ -1281,9 +1317,6 @@ def index():
         prev_agro_cum=prev_agro_cum,
         tv_mode=tv_mode,
     )
-  
-
-
 # --------- WEATHER DATA MANAGEMENT PAGE ---------
 
 @app.route("/weather", methods=["GET", "POST"])
@@ -1648,6 +1681,7 @@ def agronomy_view(block_id):
         running_cum = 0.0
         for i, row in enumerate(rows):
             week = request.form.get(f"ag_week_{i}", "").strip()
+            std_gain_str = request.form.get(f"standard_gain_{i}", "").strip()
             gain_str = request.form.get(f"gain_{i}", "").strip()
             fert_str = request.form.get(f"fert_{i}", "").strip()
             chem_str = request.form.get(f"chem_{i}", "").strip()
@@ -1662,6 +1696,7 @@ def agronomy_view(block_id):
             updated.append(
                 {
                     "week": week,
+                    "standard_gain": std_gain_str, 
                     "gain": gain_str,
                     "cumulative": cum_str,
                     "fertigation": fert_str,
