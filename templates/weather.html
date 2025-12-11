@@ -11,7 +11,7 @@
   </div>
 
   <!-- Add new weather row -->
-  <div class="card mb-4 shadow-sm border-success">
+  <div class="card mb-3 shadow-sm border-success">
     <div class="card-header bg-success text-white fw-semibold">
       Add Daily Weather
     </div>
@@ -47,13 +47,44 @@
     </div>
   </div>
 
+  <!-- Date filter (GET) -->
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-auto">
+      <label class="form-label mb-0 small">From</label>
+      <input type="date"
+             name="start_date"
+             class="form-control form-control-sm"
+             value="{{ start_date or '' }}">
+    </div>
+    <div class="col-auto">
+      <label class="form-label mb-0 small">To</label>
+      <input type="date"
+             name="end_date"
+             class="form-control form-control-sm"
+             value="{{ end_date or '' }}">
+    </div>
+    <div class="col-auto d-flex align-items-end">
+      <button type="submit" class="btn btn-sm btn-success me-2">
+        Filter
+      </button>
+      <a href="{{ url_for('weather_page') }}" class="btn btn-sm btn-outline-secondary">
+        Clear
+      </a>
+    </div>
+  </form>
+
   <!-- History + inline edit (LATEST FIRST) -->
   <div class="card mb-4 shadow-sm">
     <div class="card-header bg-light d-flex justify-content-between align-items-center">
       <span class="fw-semibold">Daily History (latest on top)</span>
-      <a href="{{ url_for('download_weather') }}" class="btn btn-outline-success btn-sm">
-        Download CSV
-      </a>
+      <div class="d-flex align-items-center gap-2">
+        <span class="text-muted small">
+          {{ weather_row_count }} row{{ weather_row_count == 1 and "" or "s" }}
+        </span>
+        <a href="{{ url_for('download_weather') }}" class="btn btn-outline-success btn-sm">
+          Download CSV
+        </a>
+      </div>
     </div>
     <div class="card-body p-0">
       <form method="post">
@@ -61,9 +92,9 @@
         <input type="hidden" name="row_count" value="{{ weather_row_count }}">
 
         <!-- scrollable daily history table -->
-        <div class="table-responsive scroll-x">
+        <div class="table-responsive scroll-x" style="max-height: 420px; overflow-y: auto;">
           <table class="table table-sm table-striped table-hover align-middle mb-0">
-            <thead class="table-success">
+            <thead class="table-success sticky-top">
               <tr class="text-center">
                 <th style="min-width:110px;">Date</th>
                 <th style="min-width:90px;">Tmax (°C)</th>
@@ -134,9 +165,9 @@
     </div>
     <div class="card-body p-0">
       <!-- scrollable monthly summary table -->
-      <div class="table-responsive scroll-x">
+      <div class="table-responsive scroll-x" style="max-height: 320px; overflow-y: auto;">
         <table class="table table-sm table-striped align-middle mb-0">
-          <thead class="table-light">
+          <thead class="table-light sticky-top">
             <tr class="text-center">
               <th style="min-width:140px;">Month</th>
               <th style="min-width:140px;">Avg Tmax (°C)</th>

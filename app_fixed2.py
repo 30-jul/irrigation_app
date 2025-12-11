@@ -1387,11 +1387,13 @@ def index():
         tv_mode=tv_mode,
     )
 # --------- WEATHER DATA MANAGEMENT PAGE ---------
-
 @app.route("/weather", methods=["GET", "POST"])
 def weather_page():
     today = date.today()
 
+    # -------------------------
+    # 1. Handle POST (add/edit)
+    # -------------------------
     if request.method == "POST":
         action = request.form.get("action")
 
@@ -1421,7 +1423,9 @@ def weather_page():
                     )
 
         elif action == "edit_weather":
-            new_list = []
+            # Build a dict of ALL existing rows keyed by date_str
+            existing = {r["date_str"]: r for r in weather_data}
+
             try:
                 row_count = int(request.form.get("row_count", "0"))
             except ValueError:
@@ -1435,7 +1439,14 @@ def weather_page():
                 et0 = request.form.get(f"et0_{i}", "").strip()
                 delete_flag = request.form.get(f"delete_{i}")
 
-                if not d_str or delete_flag == "on":
+                # If row is marked delete and exists → remove it
+                if delete_flag == "on":
+                    if d_str in existing:
+                        existing.pop(d_str, None)
+                    continue
+
+                # If date is missing, skip
+                if not d_str:
                     continue
 
                 try:
@@ -1443,29 +1454,63 @@ def weather_page():
                 except ValueError:
                     continue
 
-                new_list.append(
-                    {
-                        "date": d_obj,
-                        "date_str": d_str,
-                        "tmax": tmax,
-                        "tmin": tmin,
-                        "rain": rain,
-                        "et0": et0,
-                    }
-                )
+                # Upsert this date into the dict
+                existing[d_str] = {
+                    "date": d_obj,
+                    "date_str": d_str,
+                    "tmax": tmax,
+                    "tmin": tmin,
+                    "rain": rain,
+                    "et0": et0,
+                }
 
+            # Replace global weather_data with ALL rows (edited + untouched)
             weather_data.clear()
-            weather_data.extend(new_list)
+            weather_data.extend(sorted(existing.values(), key=lambda x: x["date"]))
 
-        # NEW: persist to MySQL
+        # Persist to MySQL
         try:
             save_weather_to_db()
         except Exception as e:
             print("Failed to save weather to DB:", e)
 
+        # After POST, go back to clean GET (no duplicate submissions)
+        return redirect(url_for("weather_page"))
+
+    # -------------------------
+    # 2. Base rows (sorted)
+    # -------------------------
     rows = sorted(weather_data, key=lambda x: x["date"])
+
+    # -------------------------
+    # 3. Date filter (GET)
+    # -------------------------
+    start_date_str = request.args.get("start_date", "").strip()
+    end_date_str = request.args.get("end_date", "").strip()
+    start_dt = end_dt = None
+
+    if start_date_str:
+        try:
+            start_dt = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            start_dt = None
+
+    if end_date_str:
+        try:
+            end_dt = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            end_dt = None
+
+    if start_dt:
+        rows = [r for r in rows if r["date"] >= start_dt]
+    if end_dt:
+        rows = [r for r in rows if r["date"] <= end_dt]
+
     row_count = len(rows)
 
+    # -------------------------
+    # 4. Monthly stats (FROM FILTERED ROWS)
+    # -------------------------
     monthly = defaultdict(lambda: {"tmax": [], "tmin": [], "rain": [], "et0": []})
     for r in rows:
         d = r["date"]
@@ -1511,9 +1556,9 @@ def weather_page():
         num_blocks=NUM_BLOCKS,
         block_id=0,
         block_names=BLOCK_NAMES,
+        start_date=start_date_str,
+        end_date=end_date_str,
     )
-
-
 # --------- DOWNLOAD WEATHER CSV ---------
 
 @app.route("/download_weather")
