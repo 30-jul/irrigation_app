@@ -513,32 +513,72 @@ def fetch_forecast():
         "chart_rain": chart_rain,
     }
 
+from datetime import date, datetime, timedelta  # you already have these near the top
+
 def compute_soil_balance(block_id: int):
     """
-    Compute current soil-moisture balance for a block using:
+    Compute current soil-moisture balance for a block using the SAME
+    7-day (or from cut date) window logic as the block page:
+
       Balance_today = Balance_start - ΣETc + Σ(Effective Rain + Irrigation)
     """
+    today = date.today()
+
     manual = soil_manual[block_id]
+    meta = block_meta[block_id]
+
+    # Starting balance (TAM-style value you set on the irrigation page)
     start_balance = manual.get("start_balance", 120.0)
-    balance = start_balance
-    kc_val = safe_float(block_meta[block_id].get("kc")) or 1.0
+    balance = float(start_balance)
 
-    for r in sorted(weather_data, key=lambda x: x["date"]):
-        dstr = r["date_str"]
-        et0 = safe_float(r.get("et0")) or 0.0
-        etc = et0 * kc_val
+    # Kc for this block
+    kc_val = safe_float(meta.get("kc")) or 1.0
 
-        md = manual.get("by_date", {}).get(dstr, {})
-        eff = safe_float(md.get("eff")) or 0.0
-        irr = safe_float(md.get("irr")) or 0.0
+    # Optional cut date
+    cut_dt = None
+    cut_str = meta.get("cut_date") or ""
+    if cut_str:
+        try:
+            cut_dt = datetime.strptime(cut_str, "%Y-%m-%d").date()
+        except ValueError:
+            cut_dt = None
 
-        balance = balance - etc + eff + irr
-        if balance > MAX_DEFICIT_BALANCE:
-            balance = MAX_DEFICIT_BALANCE
-        if balance < 0:
-            balance = 0
+    # Weather indexed by real date
+    weather_by_date = {r["date"]: r for r in weather_data}
+
+    # 📌 Same window as block page: last 7 days, but not before cut date
+    window_start = today - timedelta(days=6)
+    if cut_dt and cut_dt > window_start:
+        window_start = cut_dt
+
+    current = window_start
+    while current <= today:
+        r = weather_by_date.get(current)
+        if r:
+            dstr = r["date_str"]
+
+            # ETc = ET0 * Kc
+            et0_val = safe_float(r.get("et0")) or 0.0
+            etc = et0_val * kc_val
+
+            # Manual soil P&L entries from irrigation page
+            manual_date = manual.get("by_date", {}).get(dstr, {})
+            eff_val = safe_float(manual_date.get("eff")) or 0.0
+            irr_val = safe_float(manual_date.get("irr")) or 0.0
+
+            # Update balance
+            balance = balance - etc + eff_val + irr_val
+
+            # Clamp within 0 – MAX_DEFICIT_BALANCE
+            if balance > MAX_DEFICIT_BALANCE:
+                balance = MAX_DEFICIT_BALANCE
+            if balance < 0:
+                balance = 0
+
+        current += timedelta(days=1)
 
     return round(balance, 1)
+
 def soil_pct_color(balance, tam):
     """
     Return (pct, colour_hex) based on balance/TAM * 100.
