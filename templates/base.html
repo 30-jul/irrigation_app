@@ -1,4 +1,4 @@
-<!DOCTYPE html>   
+<!DOCTYPE html>    
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
@@ -199,7 +199,7 @@
           </a>
         </li>
 
-        <!-- Irrigation (formerly Blocks) -->
+        <!-- Irrigation -->
         <li class="nav-item dropdown">
           <a
             class="nav-link dropdown-toggle {% if 'block_view' in request.endpoint %}active{% endif %}"
@@ -247,7 +247,7 @@
           </ul>
         </li>
 
-        <!-- NDVI (hidden for now)
+        <!-- NDVI (optional; keep commented if not used)
         <li class="nav-item">
           <a class="nav-link {% if request.endpoint == 'ndvi_page' %}active{% endif %}"
              href="{{ url_for('ndvi_page') }}">

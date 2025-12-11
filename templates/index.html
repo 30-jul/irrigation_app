@@ -347,12 +347,14 @@ const filterColors = {{ filter_colors|tojson }};
 const forecastLabels = {{ forecast_chart_labels|tojson }};
 const forecastTemps = {{ forecast_chart_temp|tojson }};
 const forecastRain  = {{ forecast_chart_rain|tojson }};
-/* emojis for tooltip */
 const forecastEmojis = {{ forecast_days | map(attribute='emoji') | list | tojson }};
 
 const blockNames = {{ block_names|tojson }};
-const agroWeekly = {{ agro_weekly|tojson }};
-const agroCum   = {{ agro_cum|tojson }};
+
+const agroLabels   = {{ agro_labels|tojson }};
+const agroWeekly   = {{ agro_weekly|tojson }};
+const agroCum      = {{ agro_cum|tojson }};
+const agroColors   = {{ agro_colors|tojson }};
 
 const ndviDict  = {{ avg_ndvi_by_block|tojson }};
 const pestDict  = {{ pest_counts|tojson }};
@@ -460,18 +462,18 @@ new Chart(document.getElementById('blockFilterChart'), {
 });
 {% endif %}
 
-/* -------- FORECAST CHART (with dates + colours + emojis) -------- */
+/* -------- FORECAST CHART (with dates + emojis) -------- */
 new Chart(document.getElementById('forecastChart'), {
   type: 'bar',
   data: {
-    labels: forecastLabels,   // "Mon 25 Nov", etc (from backend)
+    labels: forecastLabels,
     datasets: [
       {
         type: 'line',
         label: 'Temperature (°C)',
         data: forecastTemps,
         borderWidth: 2,
-        borderColor: '#ff9800',              // orange line
+        borderColor: '#ff9800',
         pointBackgroundColor: '#ff9800',
         pointRadius: 3,
         tension: 0.3,
@@ -481,7 +483,7 @@ new Chart(document.getElementById('forecastChart'), {
         type: 'bar',
         label: 'Rain (mm)',
         data: forecastRain,
-        backgroundColor: 'rgba(33,150,243,0.5)', // blue bars
+        backgroundColor: 'rgba(33,150,243,0.5)',
         borderColor: '#2196f3',
         borderWidth: 1,
         yAxisID: 'y1'
@@ -546,13 +548,17 @@ const agroCtx = document.getElementById('agronomyChart').getContext('2d');
 let agroChart = new Chart(agroCtx, {
   type: 'bar',
   data: {
-    labels: blockNames,
+    labels: agroLabels,
     datasets: [
       {
         label: 'Weekly Gain (cm)',
         data: agroWeekly,
-        backgroundColor: 'rgba(0, 123, 255, 0.70)',
-        borderColor: 'rgba(0, 123, 255, 1)',
+        backgroundColor: (agroColors && agroColors.length)
+          ? agroColors
+          : 'rgba(0, 123, 255, 0.70)',
+        borderColor: (agroColors && agroColors.length)
+          ? agroColors
+          : 'rgba(0, 123, 255, 1)',
         borderWidth: 1,
         hidden: false,
         yAxisID: 'y'
@@ -609,14 +615,12 @@ function showAgroMode(mode){
 }
 
 /* -------- SOIL MOISTURE BALANCE (COLOURED BARS) -------- */
-
-// Helper to get colour HEX from % of TAM
 function soilColourFromPercent(pct) {
-  if (pct >= 95) return '#3b82f6';      // blue
-  if (pct >= 90) return '#93c5fd';      // light blue
-  if (pct >= 70) return '#86efac';      // green
-  if (pct >= 50) return '#fdba74';      // orange
-  return '#fca5a5';                     // red
+  if (pct >= 95) return '#3b82f6';
+  if (pct >= 90) return '#93c5fd';
+  if (pct >= 70) return '#86efac';
+  if (pct >= 50) return '#fdba74';
+  return '#fca5a5';
 }
 
 const soilLabels = Object.keys(soilRaw);
@@ -627,7 +631,6 @@ soilLabels.forEach(name => {
   const entry = soilRaw[name] || {};
   const balance = Number(entry.balance) || 0;
 
-  // Try to read TAM / start balance / percent if provided by backend
   const tam =
     Number(entry.tam) ||
     Number(entry.TAM) ||
@@ -689,7 +692,7 @@ if (document.getElementById('soilChart')) {
   });
 }
 
-/* -------- OPTIONAL NDVI & PEST CHARTS (OTHER PAGES) -------- */
+/* -------- OPTIONAL NDVI & PEST CHARTS -------- */
 const ndvi = dictToArrays(ndviDict);
 if (document.getElementById('ndviChart')) {
   new Chart(document.getElementById('ndviChart'), {
@@ -871,7 +874,7 @@ if (tvMode) {
     rotationInterval = setInterval(() => {
       if (isPaused) return;
       gotoNextPanel();
-    }, 60000); // 1 minute per panel
+    }, 60000);
   }
 
   document.addEventListener('DOMContentLoaded', () => {

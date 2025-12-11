@@ -99,6 +99,8 @@
             <thead class="table-success text-center">
               <tr>
                 <th style="min-width:170px;">Week</th>
+                <!-- NEW COLUMN -->
+                <th style="min-width:160px;">Standard Weekly Gain (cm)</th>
                 <th style="min-width:140px;">Weekly Gain (cm)</th>
                 <th style="min-width:140px;">Cumulative (cm)</th>
                 <th style="min-width:150px;">Fertigation</th>
@@ -113,6 +115,14 @@
                   <input type="text" name="ag_week_{{ i }}" value="{{ row.week }}"
                          class="form-control form-control-sm">
                 </td>
+
+                <!-- NEW: Standard Weekly Gain input -->
+                <td>
+                  <input type="number" step="0.1" name="standard_gain_{{ i }}"
+                         value="{{ row.standard_gain }}"
+                         class="form-control form-control-sm">
+                </td>
+
                 <td>
                   <input type="number" step="0.1" name="gain_{{ i }}"
                          value="{{ row.gain }}" class="form-control form-control-sm">
